@@ -3,7 +3,7 @@
   "displayName": "Quorvox Dev",
   "description": "Одна кнопка поднимает проект, карта объясняет как всё связано (CSS, фронт, бэк, база), проверки, QR для телефона и выкладка на VPS",
   "version": "0.9.0",
-  "publisher": "quorvox",
+  "publisher": "QuorvoxTeam",
   "license": "MIT",
   "icon": "media/icon.png",
   "galleryBanner": {

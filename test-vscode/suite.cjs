@@ -37,8 +37,8 @@ async function run() {
   const diagOf = (uri) => vscode.languages.getDiagnostics(uri).filter((d) => d.source === 'Quorvox');
 
   await step('расширение запускается и регистрирует команды', async () => {
-    const ext = vscode.extensions.getExtension('quorvox.quorvox-dev');
-    assert(ext, 'расширение quorvox.quorvox-dev не найдено');
+    const ext = vscode.extensions.getExtension('QuorvoxTeam.quorvox-dev');
+    assert(ext, 'расширение QuorvoxTeam.quorvox-dev не найдено');
     await ext.activate();
     const cmds = await vscode.commands.getCommands(true);
     for (const c of ['quorvox.toggle', 'quorvox.dashboard', 'quorvox.map', 'quorvox.deploy', 'quorvox.phone', 'quorvox.editorToggle']) {
