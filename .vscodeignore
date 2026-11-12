@@ -1,0 +1,11 @@
+src/**
+test/**
+test-vscode/**
+.test-tmp/**
+.gitignore
+package-lock.json
+.vscode/**
+node_modules/**
+esbuild.mjs
+tsconfig.json
+**/*.map

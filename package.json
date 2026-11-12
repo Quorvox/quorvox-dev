@@ -1,0 +1,276 @@
+{
+  "name": "quorvox-dev",
+  "displayName": "Quorvox Dev",
+  "description": "Одна кнопка поднимает проект, карта объясняет как всё связано (CSS, фронт, бэк, база), проверки, QR для телефона и выкладка на VPS",
+  "version": "0.9.0",
+  "publisher": "quorvox",
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#0f172a",
+    "theme": "dark"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Quorvox/quorvox-dev.git"
+  },
+  "homepage": "https://github.com/Quorvox/quorvox-dev#readme",
+  "bugs": {
+    "url": "https://github.com/Quorvox/quorvox-dev/issues"
+  },
+  "keywords": [
+    "live reload",
+    "dev server",
+    "express",
+    "frontend",
+    "css",
+    "deploy",
+    "vps",
+    "qr",
+    "mobile",
+    "autocomplete",
+    "diagnostics",
+    "project map"
+  ],
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other",
+    "Linters"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "quorvox",
+          "title": "Quorvox",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "quorvox": [
+        {
+          "id": "quorvox.services",
+          "name": "Сервисы"
+        },
+        {
+          "id": "quorvox.checks",
+          "name": "Проверки"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "quorvox.services",
+        "contents": "В этой папке нет проекта для запуска.\nПодойдёт package.json со скриптом dev или start, страница index.html (запущу как сайт) или файл quorvox.json.\n[Пересканировать](command:quorvox.rescan)",
+        "when": "quorvox.noServices"
+      }
+    ],
+    "commands": [
+      {
+        "command": "quorvox.toggle",
+        "title": "Quorvox: Запустить / остановить всё",
+        "icon": "$(debug-start)"
+      },
+      {
+        "command": "quorvox.dashboard",
+        "title": "Quorvox: Открыть дашборд",
+        "icon": "$(layout)"
+      },
+      {
+        "command": "quorvox.open",
+        "title": "Quorvox: Открыть в браузере (с автообновлением)",
+        "icon": "$(globe)"
+      },
+      {
+        "command": "quorvox.showLogs",
+        "title": "Quorvox: Показать логи в панели «Вывод»"
+      },
+      {
+        "command": "quorvox.rescan",
+        "title": "Quorvox: Пересканировать проект",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "quorvox.check",
+        "title": "Quorvox: Проверить проект",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "quorvox.map",
+        "title": "Quorvox: Карта проекта (как всё связано)",
+        "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "quorvox.phone",
+        "title": "Quorvox: Открыть на телефоне (QR)",
+        "icon": "$(device-mobile)"
+      },
+      {
+        "command": "quorvox.phoneOff",
+        "title": "Quorvox: Выключить доступ с телефона"
+      },
+      {
+        "command": "quorvox.deploy",
+        "title": "Quorvox: Выложить на сервер (VPS)",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "quorvox.rollback",
+        "title": "Quorvox: Откатить сервер на прошлую версию"
+      },
+      {
+        "command": "quorvox.editorToggle",
+        "title": "Quorvox: Подсказки в редакторе (включить / выключить)"
+      },
+      {
+        "command": "quorvox.releaseOk",
+        "title": "Quorvox: Работает, удалить копию старой версии на сервере"
+      },
+      {
+        "command": "quorvox.envExample",
+        "title": "Quorvox: Создать .env.example из кода"
+      },
+      {
+        "command": "quorvox.openFinding",
+        "title": "Quorvox: Открыть место замечания"
+      },
+      {
+        "command": "quorvox.service.start",
+        "title": "Quorvox: Запустить сервис",
+        "icon": "$(play)"
+      },
+      {
+        "command": "quorvox.service.stop",
+        "title": "Quorvox: Остановить сервис",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "quorvox.service.restart",
+        "title": "Quorvox: Перезапустить сервис",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "quorvox.service.open",
+        "title": "Quorvox: Открыть сервис в браузере",
+        "icon": "$(globe)"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "quorvox.openFinding",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "quorvox.check",
+          "when": "view == quorvox.checks",
+          "group": "navigation"
+        },
+        {
+          "command": "quorvox.map",
+          "when": "view == quorvox.services",
+          "group": "navigation@0"
+        },
+        {
+          "command": "quorvox.deploy",
+          "when": "view == quorvox.services",
+          "group": "navigation@4"
+        },
+        {
+          "command": "quorvox.toggle",
+          "when": "view == quorvox.services",
+          "group": "navigation@1"
+        },
+        {
+          "command": "quorvox.dashboard",
+          "when": "view == quorvox.services",
+          "group": "navigation@2"
+        },
+        {
+          "command": "quorvox.rescan",
+          "when": "view == quorvox.services",
+          "group": "navigation@3"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "quorvox.service.start",
+          "when": "view == quorvox.services && viewItem =~ /stopped/",
+          "group": "inline@1"
+        },
+        {
+          "command": "quorvox.service.restart",
+          "when": "view == quorvox.services && viewItem =~ /running|crashed/",
+          "group": "inline@1"
+        },
+        {
+          "command": "quorvox.service.stop",
+          "when": "view == quorvox.services && viewItem =~ /running|crashed/",
+          "group": "inline@2"
+        },
+        {
+          "command": "quorvox.service.open",
+          "when": "view == quorvox.services && viewItem =~ /live/",
+          "group": "inline@3"
+        },
+        {
+          "command": "quorvox.phone",
+          "when": "view == quorvox.services && viewItem =~ /live/",
+          "group": "inline@4"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Quorvox Dev",
+      "properties": {
+        "quorvox.autoRestart": {
+          "type": "boolean",
+          "default": true,
+          "description": "Перезапускать сервис и обновлять страницу в браузере при изменении файлов"
+        },
+        "quorvox.editor.diagnostics": {
+          "type": "boolean",
+          "default": true,
+          "description": "Подчёркивать в коде ошибки, которые находят проверки: адрес API, которого нет на сервере, неизвестный класс, битая ссылка на файл. Работает и по несохранённому тексту."
+        },
+        "quorvox.editor.completions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Автодополнение классов из твоего CSS и адресов API с сервера (и переменных .env), переход к определению по Ctrl+клику и подсказка при наведении."
+        },
+        "quorvox.showDashboardOnStart": {
+          "type": "boolean",
+          "default": true,
+          "description": "Открывать вкладку-дашборд с логами при запуске сервисов"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "check": "tsc --noEmit",
+    "test:vscode": "node test-vscode/run.mjs",
+    "test": "node --test --test-timeout=60000 \"test/*.test.ts\"",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/vscode": "1.90.0",
+    "@vscode/vsce": "^4.1.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "qrcode-generator": "2.0.4"
+  }
+}
