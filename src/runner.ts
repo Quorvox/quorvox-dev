@@ -1,9 +1,10 @@
-﻿import { spawn, execFile } from 'node:child_process';
+import { spawn, execFile } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import type { Readable } from 'node:stream';
 import { EventEmitter } from 'node:events';
 import type { ServiceDef } from './detect.ts';
 import type { LiveProxy } from './live.ts';
+import { tr } from './i18n.ts';
 
 export type Status = 'stopped' | 'running' | 'crashed';
 
@@ -69,13 +70,13 @@ export class ServiceRunner extends EventEmitter {
     this.pipe(proc.stdout);
     this.pipe(proc.stderr);
     proc.on('error', (e) => {
-      this.emit('log', `не запустилось: ${e.message}`);
+      this.emit('log', tr('не запустилось: {0}', e.message));
     });
     proc.on('exit', (code) => {
       if (this.proc !== proc) return;
       this.proc = null;
       // при остановке нами код всегда «1» от taskkill — не пугаем им
-      this.emit('log', this.stopping ? 'остановлен' : `остановлен (код ${code})`);
+      this.emit('log', this.stopping ? tr('остановлен') : tr('остановлен (код {0})', code));
       this.setStatus(this.stopping || code === 0 ? 'stopped' : 'crashed');
     });
   }

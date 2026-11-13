@@ -63,6 +63,7 @@ const args = [
   `--extensions-dir=${join(work, 'ext')}`,
   `--extensionDevelopmentPath=${ext}`,
   `--extensionTestsPath=${join(here, 'suite.cjs')}`,
+  '--locale=ru',
   '--disable-extensions',
   '--disable-workspace-trust',
   '--disable-telemetry',

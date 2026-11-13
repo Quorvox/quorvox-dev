@@ -1,6 +1,7 @@
-﻿import { ServiceRunner } from './runner.ts';
+import { ServiceRunner } from './runner.ts';
 import { startStaticServer } from './staticserver.ts';
 import type { StaticServer } from './staticserver.ts';
+import { tr } from './i18n.ts';
 
 // «Сервис» для сайта без бэкенда: вместо процесса поднимаем встроенный статический сервер.
 // Для остального расширения он выглядит как обычный сервис (логи, статус, порт → прокси с живым обновлением).
@@ -19,11 +20,11 @@ export class StaticRunner extends ServiceRunner {
           return;
         }
         this.srv = s;
-        this.emit('log', `Статический сайт: http://localhost:${s.port} (папка ${this.def.cwd})`);
+        this.emit('log', tr('Статический сайт: http://localhost:{0} (папка {1})', s.port, this.def.cwd));
       },
       (e: Error) => {
         if (my !== this.seq) return;
-        this.emit('log', `не запустилось: ${e.message}`);
+        this.emit('log', tr('не запустилось: {0}', e.message));
         this.setStatus('crashed');
       },
     );
@@ -34,7 +35,7 @@ export class StaticRunner extends ServiceRunner {
     const s = this.srv;
     this.srv = null;
     if (this.status !== 'stopped') {
-      this.emit('log', 'остановлен');
+      this.emit('log', tr('остановлен'));
       this.setStatus('stopped');
     }
     await s?.close();

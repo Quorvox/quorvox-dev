@@ -4,6 +4,7 @@ import { collectWeb } from './webfiles.ts';
 import { analyzeCss } from './cssmap.ts';
 import type { WebFile } from './webfiles.ts';
 import type { Src, Route, Call } from './checks.ts';
+import { tr, N } from './i18n.ts';
 
 // Карта проекта «для новичка»: кто кого подключает и вызывает.
 // страницы → стили и скрипты → серверные файлы → таблицы БД и внешние сервисы.
@@ -96,27 +97,27 @@ const NOISE_HOSTS = /(^|\.)(localhost|w3\.org|schema\.org|sitemaps\.org|example\
 const FRIENDLY_HOSTS: [RegExp, string][] = [
   [/telegram|^t\.me$/i, 'Telegram'],
   [/openstreetmap/i, 'OpenStreetMap'],
-  [/^id\.quorvox\.ru$/i, 'Quorvox ID (вход)'],
+  [/^id\.quorvox\.ru$/i, N('Quorvox ID (вход)')],
   [/discord/i, 'Discord'],
   [/google|gstatic/i, 'Google'],
-  [/yandex/i, 'Яндекс'],
+  [/yandex/i, N('Яндекс')],
   [/github/i, 'GitHub'],
   [/mapillary/i, 'Mapillary'],
   [/stripe/i, 'Stripe'],
-  [/openai|anthropic/i, 'ИИ-сервис'],
+  [/openai|anthropic/i, N('ИИ-сервис')],
 ];
 const ENV_SERVICES: [RegExp, string][] = [
   [/process\.env\.TELEGRAM/, 'Telegram'],
   [/process\.env\.DISCORD/, 'Discord'],
-  [/process\.env\.(SMTP|MAIL)/, 'Почта (SMTP)'],
-  [/process\.env\.VAPID/, 'Push-уведомления'],
+  [/process\.env\.(SMTP|MAIL)/, N('Почта (SMTP)')],
+  [/process\.env\.VAPID/, N('Push-уведомления')],
   [/process\.env\.STRIPE/, 'Stripe'],
   [/process\.env\.MAPILLARY/, 'Mapillary'],
-  [/process\.env\.QUORVOX/, 'Quorvox ID (вход)'],
+  [/process\.env\.QUORVOX/, N('Quorvox ID (вход)')],
 ];
 const PACKAGE_SERVICES: [RegExp, string][] = [
-  [/require\(\s*['"]nodemailer['"]|from\s+['"]nodemailer['"]/, 'Почта (SMTP)'],
-  [/require\(\s*['"]web-push['"]|from\s+['"]web-push['"]/, 'Push-уведомления'],
+  [/require\(\s*['"]nodemailer['"]|from\s+['"]nodemailer['"]/, N('Почта (SMTP)')],
+  [/require\(\s*['"]web-push['"]|from\s+['"]web-push['"]/, N('Push-уведомления')],
   [/require\(\s*['"](node-telegram-bot-api|telegraf)['"]|from\s+['"](grammy|telegraf)['"]/, 'Telegram'],
   [/require\(\s*['"]stripe['"]|from\s+['"]stripe['"]/, 'Stripe'],
   [/require\(\s*['"]discord\.js['"]|from\s+['"]discord\.js['"]/, 'Discord'],
@@ -124,7 +125,7 @@ const PACKAGE_SERVICES: [RegExp, string][] = [
 
 function externalsOf(f: Src): Set<string> {
   const out = new Set<string>();
-  for (const [re, name] of [...ENV_SERVICES, ...PACKAGE_SERVICES]) if (re.test(f.src)) out.add(name);
+  for (const [re, name] of [...ENV_SERVICES, ...PACKAGE_SERVICES]) if (re.test(f.src)) out.add(tr(name));
   for (const m of f.src.matchAll(/['"`]https?:\/\/([a-z0-9][a-z0-9.-]*\.[a-z]{2,})/gi)) {
     const host = m[1].toLowerCase();
     if (NOISE_HOSTS.test(host)) continue;
@@ -174,7 +175,7 @@ function callLabel(c: Call): string {
 
 function listShort(items: string[], max = 5): string {
   const uniq = [...new Set(items)];
-  return uniq.slice(0, max).join(', ') + (uniq.length > max ? ` и ещё ${uniq.length - max}` : '');
+  return uniq.slice(0, max).join(', ') + (uniq.length > max ? tr(' и ещё {0}', uniq.length - max) : '');
 }
 
 export function buildMap(root: string): ProjectMap {
@@ -256,14 +257,14 @@ export function buildMap(root: string): ProjectMap {
 
   // серверы
   const serverRels = [...routesByFile.keys()].sort((a, b) => routesByFile.get(b)!.length - routesByFile.get(a)!.length);
-  if (serverRels.length > MAX_SERVERS) notes.push(`Серверных файлов с маршрутами ${serverRels.length}, показаны ${MAX_SERVERS} самых больших.`);
+  if (serverRels.length > MAX_SERVERS) notes.push(tr('Серверных файлов с маршрутами {0}, показаны {1} самых больших.', serverRels.length, MAX_SERVERS));
   const shownServers = serverRels.slice(0, MAX_SERVERS);
 
   // скрипты: те, что шлют запросы, и те, что подключены страницами напрямую
   const directScripts = new Set(pageInfo.flatMap((p) => p.scripts.map((s) => s.toLowerCase())));
   const scriptRels = [...callsByFile.keys()].sort((a, b) => callsByFile.get(b)!.length - callsByFile.get(a)!.length);
   const shownScriptRels = new Set(scriptRels.slice(0, MAX_SCRIPTS));
-  if (scriptRels.length > MAX_SCRIPTS) notes.push(`Скриптов с запросами к серверу ${scriptRels.length}, показаны ${MAX_SCRIPTS} самых активных.`);
+  if (scriptRels.length > MAX_SCRIPTS) notes.push(tr('Скриптов с запросами к серверу {0}, показаны {1} самых активных.', scriptRels.length, MAX_SCRIPTS));
   const entryScripts = [...directScripts].map((a) => byAbs.get(a)).filter((x): x is Src => !!x);
   for (const s of entryScripts) shownScriptRels.add(s.rel);
   const scriptList = [...shownScriptRels];
@@ -274,9 +275,9 @@ export function buildMap(root: string): ProjectMap {
     const id = `page:${p.page.rel}`;
     const styleNames = p.styles.map((s) => relative(root, s).replace(/\\/g, '/'));
     const scriptNames = p.scripts.map((s) => relative(root, s).replace(/\\/g, '/'));
-    const text = ['Это страница сайта: то, что браузер открывает по адресу. Она собирает всё остальное.'];
-    if (styleNames.length) text.push(`Подключает оформление (CSS): ${listShort(styleNames.map((x) => basename(x)))}.`);
-    if (scriptNames.length) text.push(`Подключает скрипты: ${listShort(scriptNames.map((x) => basename(x)))} (а через их import подтягиваются и другие файлы).`);
+    const text = [tr('Это страница сайта: то, что браузер открывает по адресу. Она собирает всё остальное.')];
+    if (styleNames.length) text.push(tr('Подключает оформление (CSS): {0}.', listShort(styleNames.map((x) => basename(x)))));
+    if (scriptNames.length) text.push(tr('Подключает скрипты: {0} (а через их import подтягиваются и другие файлы).', listShort(scriptNames.map((x) => basename(x)))));
     nodes.push({ id, kind: 'page', label: labelFor(p.page.rel, pageRels), file: p.page.rel, line: 1, text });
   }
 
@@ -297,8 +298,8 @@ export function buildMap(root: string): ProjectMap {
       file: s.rel,
       line: 1,
       text: [
-        'Файл оформления (CSS): отвечает за то, как выглядит сайт: цвета, шрифты, отступы, расположение блоков. Логики и данных тут нет.',
-        `Примерно ${rules} правил оформления. Подключён на страницах: ${listShort(users)}.`,
+        tr('Файл оформления (CSS): отвечает за то, как выглядит сайт: цвета, шрифты, отступы, расположение блоков. Логики и данных тут нет.'),
+        tr('Примерно {0} правил оформления. Подключён на страницах: {1}.', rules, listShort(users)),
       ],
     });
   }
@@ -308,11 +309,11 @@ export function buildMap(root: string): ProjectMap {
     const f = client.find((c) => c.rel === rel);
     if (!f) continue;
     const my = callsByFile.get(rel) ?? [];
-    const text = ['Скрипт, который работает в браузере пользователя: реагирует на клики и рисует страницу.'];
-    if (my.length) text.push(`Отправляет запросы на сервер (${my.length}): ${listShort(my.map(callLabel), 6)}.`);
-    else text.push('Сам к серверу не обращается: подключён страницей и/или другими скриптами.');
+    const text = [tr('Скрипт, который работает в браузере пользователя: реагирует на клики и рисует страницу.')];
+    if (my.length) text.push(tr('Отправляет запросы на сервер ({0}): {1}.', my.length, listShort(my.map(callLabel), 6)));
+    else text.push(tr('Сам к серверу не обращается: подключён страницей и/или другими скриптами.'));
     const users = pageInfo.filter((p) => p.scripts.some((s) => s.toLowerCase() === f.abs.toLowerCase())).map((p) => basename(p.page.rel));
-    if (users.length) text.push(`Страница подключает его напрямую: ${listShort(users)}.`);
+    if (users.length) text.push(tr('Страница подключает его напрямую: {0}.', listShort(users)));
     nodes.push({
       id: `script:${rel}`,
       kind: 'script',
@@ -320,7 +321,7 @@ export function buildMap(root: string): ProjectMap {
       file: rel,
       line: my[0]?.line ?? 1,
       text,
-      meta: my.length ? `${my.length} запр.` : undefined,
+      meta: my.length ? tr('{0} запр.', my.length) : undefined,
     });
   }
 
@@ -337,14 +338,14 @@ export function buildMap(root: string): ProjectMap {
     const callers = new Set<string>();
     for (const [c, r] of routeOf) if (r.file === rel) callers.add(basename(c.file));
     const prefix = commonPrefix(rs);
-    const text = [`Серверный файл: принимает запросы от сайта и отвечает на них. Маршрутов (адресов, которые он обслуживает): ${rs.length}.`];
-    text.push(`Примеры: ${listShort(rs.map((r) => `${r.method} ${r.full}`), 4)}.`);
-    if (prefix.length > 1) text.push(`Все адреса начинаются с ${prefix}.`);
-    if (callers.size) text.push(`Его вызывают скрипты: ${listShort([...callers], 6)}.`);
-    else text.push('Ни один скрипт сайта его пока не вызывает (или вызывает неочевидным способом).');
-    if (tables.size) text.push(`Читает и пишет таблицы базы данных: ${listShort([...tables], 6)}.`);
-    if (exts.size) text.push(`Обращается к внешним сервисам: ${listShort([...exts], 6)}.`);
-    nodes.push({ id: `server:${rel}`, kind: 'server', label: labelFor(rel, shownServers), file: rel, line: rs[0].line, text, meta: `${rs.length} адр.` });
+    const text = [tr('Серверный файл: принимает запросы от сайта и отвечает на них. Маршрутов (адресов, которые он обслуживает): {0}.', rs.length)];
+    text.push(tr('Примеры: {0}.', listShort(rs.map((r) => `${r.method} ${r.full}`), 4)));
+    if (prefix.length > 1) text.push(tr('Все адреса начинаются с {0}.', prefix));
+    if (callers.size) text.push(tr('Его вызывают скрипты: {0}.', listShort([...callers], 6)));
+    else text.push(tr('Ни один скрипт сайта его пока не вызывает (или вызывает неочевидным способом).'));
+    if (tables.size) text.push(tr('Читает и пишет таблицы базы данных: {0}.', listShort([...tables], 6)));
+    if (exts.size) text.push(tr('Обращается к внешним сервисам: {0}.', listShort([...exts], 6)));
+    nodes.push({ id: `server:${rel}`, kind: 'server', label: labelFor(rel, shownServers), file: rel, line: rs[0].line, text, meta: tr('{0} адр.', rs.length) });
   }
 
   // таблицы и внешнее
@@ -355,7 +356,7 @@ export function buildMap(root: string): ProjectMap {
     for (const e of extByServer.get(rel)!) extDegree.set(e, (extDegree.get(e) ?? 0) + 1);
   }
   const shownTables = [...tableDegree.keys()].sort((a, b) => tableDegree.get(b)! - tableDegree.get(a)!).slice(0, MAX_TABLES);
-  if (tableDegree.size > MAX_TABLES) notes.push(`Таблиц ${tableDegree.size}, показаны ${MAX_TABLES} самых используемых.`);
+  if (tableDegree.size > MAX_TABLES) notes.push(tr('Таблиц {0}, показаны {1} самых используемых.', tableDegree.size, MAX_TABLES));
   const shownExt = [...extDegree.keys()].sort((a, b) => extDegree.get(b)! - extDegree.get(a)!).slice(0, MAX_EXTERNALS);
 
   for (const t of shownTables) {
@@ -364,7 +365,7 @@ export function buildMap(root: string): ProjectMap {
       id: `table:${t}`,
       kind: 'table',
       label: t,
-      text: ['Таблица в базе данных: здесь постоянно хранятся данные (то, что не должно пропасть после перезапуска).', `С ней работают файлы: ${listShort(users)}.`],
+      text: [tr('Таблица в базе данных: здесь постоянно хранятся данные (то, что не должно пропасть после перезапуска).'), tr('С ней работают файлы: {0}.', listShort(users))],
       meta: `×${users.length}`,
     });
   }
@@ -374,7 +375,7 @@ export function buildMap(root: string): ProjectMap {
       id: `ext:${e}`,
       kind: 'external',
       label: e,
-      text: ['Внешний сервис: сервер обращается к нему по интернету (или через его библиотеку).', `Обращаются файлы: ${listShort(users)}.`],
+      text: [tr('Внешний сервис: сервер обращается к нему по интернету (или через его библиотеку).'), tr('Обращаются файлы: {0}.', listShort(users))],
       meta: `×${users.length}`,
     });
   }
@@ -445,19 +446,19 @@ export function buildMap(root: string): ProjectMap {
   for (const st of cssReport.styles) {
     const n = styleNodeByFile.get(st.file);
     if (!n) continue;
-    n.meta = st.dead.length ? `${st.dead.length} мёртв.` : `${st.total} кл.`;
-    n.text.push(`Классов в файле: ${st.total}. ` + (st.dead.length ? `Похоже, нигде не используются: ${st.dead.length} (список ниже).` : 'Все они где-то используются.'));
-    n.text.push('«Не используются» значит, что имени нет ни в HTML, ни в строках скриптов. Классы, которые ставят сторонние библиотеки, я не считаю.');
+    n.meta = st.dead.length ? tr('{0} мёртв.', st.dead.length) : tr('{0} кл.', st.total);
+    n.text.push(tr('Классов в файле: {0}. ', st.total) + (st.dead.length ? tr('Похоже, нигде не используются: {0} (список ниже).', st.dead.length) : tr('Все они где-то используются.')));
+    n.text.push(tr('«Не используются» значит, что имени нет ни в HTML, ни в строках скриптов. Классы, которые ставят сторонние библиотеки, я не считаю.'));
     if (st.dead.length) {
-      n.lists = [{ title: 'Мёртвые классы (нажми, чтобы открыть строку)', items: st.dead.slice(0, 60).map((c) => ({ label: '.' + c.name, file: c.file, line: c.line })) }];
+      n.lists = [{ title: tr('Мёртвые классы (нажми, чтобы открыть строку)'), items: st.dead.slice(0, 60).map((c) => ({ label: '.' + c.name, file: c.file, line: c.line })) }];
     }
     const rel: { id: string; note: string }[] = [];
     for (const u of st.usedBy) {
       const id = nodeIds.has(`script:${u.file}`) ? `script:${u.file}` : nodeIds.has(`page:${u.file}`) ? `page:${u.file}` : '';
-      if (id) rel.push({ id, note: `${u.count} кл.` });
+      if (id) rel.push({ id, note: tr('{0} кл.', u.count) });
     }
     if (rel.length) {
-      n.relatedTitle = 'Кто использует эти классы';
+      n.relatedTitle = tr('Кто использует эти классы');
       n.related = rel.slice(0, 40);
     }
   }
@@ -467,20 +468,20 @@ export function buildMap(root: string): ProjectMap {
     for (const st of cssReport.styles) {
       const u = st.usedBy.find((x) => x.file === n.file);
       const sid = `style:${st.file}`;
-      if (u && nodeIds.has(sid)) rel.push({ id: sid, note: `${u.count} кл.` });
+      if (u && nodeIds.has(sid)) rel.push({ id: sid, note: tr('{0} кл.', u.count) });
     }
     if (rel.length) {
-      n.relatedTitle = 'Оформление (CSS), которое он использует';
+      n.relatedTitle = tr('Оформление (CSS), которое он использует');
       n.related = rel;
-      n.text.push(`Использует классы из CSS: ${rel.map((r) => `${byLabel(r.id)} (${r.note})`).join(', ')}.`);
+      n.text.push(tr('Использует классы из CSS: {0}.', rel.map((r) => `${byLabel(r.id)} (${r.note})`).join(', ')));
     }
   }
 
   if (routes.length && !edges.some((e) => e.kind === 'calls')) {
-    notes.push('Связей «скрипт → сервер» не нашёл: сайт обращается к серверу способом, который я пока не распознаю (не api(\'/путь\') и не fetch(\'/api/…\')).');
+    notes.push(tr('Связей «скрипт → сервер» не нашёл: сайт обращается к серверу способом, который я пока не распознаю (не api(\'/путь\') и не fetch(\'/api/…\')).'));
   }
-  if (scan.unresolved.length) notes.push(`Часть роутеров не удалось разобрать: ${scan.unresolved.join(', ')}.`);
-  if (!tableNames.size && servers.length) notes.push('Таблицы базы данных не нашёл: ищу CREATE TABLE в коде сервера.');
+  if (scan.unresolved.length) notes.push(tr('Часть роутеров не удалось разобрать: {0}.', scan.unresolved.join(', ')));
+  if (!tableNames.size && servers.length) notes.push(tr('Таблицы базы данных не нашёл: ищу CREATE TABLE в коде сервера.'));
 
   return {
     nodes,

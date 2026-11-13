@@ -13,9 +13,13 @@ import { registerEditor } from './editor.ts';
 import { qrSvg } from './qr.ts';
 import { readDeployConfig, planFiles, findSecrets, deployRelease, rollbackRelease, confirmRelease, describePlan, realRun } from './deploy.ts';
 import { buildEnvExample } from './envfile.ts';
+import { registerMove } from './movecmd.ts';
+import { registerImport } from './importcmd.ts';
+import { setLang, resolveLang } from './i18n.ts';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import type { Report } from './checks.ts';
 import type { ServiceRunner } from './runner.ts';
+import { tr } from './i18n.ts';
 
 let stack: Stack | null = null;
 let out: vscode.OutputChannel;
@@ -35,6 +39,38 @@ function root(): string | undefined {
   return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 }
 
+// В папке без доверия запускать нельзя ничего: проект запускает чужой код (npm-скрипты, сервер).
+// Читать файлы, проверки, карта и подсказки в редакторе работают и так.
+function requireTrust(what: string): boolean {
+  if (vscode.workspace.isTrusted) return true;
+  void vscode.window
+    .showWarningMessage(tr('Папка не отмечена как доверенная, поэтому {0} не буду: проект запускает код, а чужой код может навредить. Если проект твой или ты его проверил — доверься папке.', what), tr('Управление доверием'))
+    .then((p) => {
+      if (p) void vscode.commands.executeCommand('workbench.trust.manage');
+    });
+  return false;
+}
+
+// язык интерфейса: «auto» — по языку VS Code (русский → русский, всё остальное → английский)
+function applyLanguage(redraw: boolean) {
+  setLang(resolveLang(vscode.workspace.getConfiguration('quorvox').get<string>('language', 'auto'), vscode.env.language));
+  if (!redraw) return;
+  dash?.relocalize();
+  mapPanel?.relocalize();
+  runChecks();
+}
+
+async function pickLanguage() {
+  const cur = vscode.workspace.getConfiguration('quorvox').get<string>('language', 'auto');
+  const items = [
+    { label: 'Auto', description: 'по языку VS Code / by VS Code language', value: 'auto' },
+    { label: 'Русский', description: '', value: 'ru' },
+    { label: 'English', description: '', value: 'en' },
+  ].map((i) => ({ ...i, picked: i.value === cur, description: i.value === cur ? i.description + ' ✓' : i.description }));
+  const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Language / Язык' });
+  if (pick) await vscode.workspace.getConfiguration('quorvox').update('language', pick.value, vscode.ConfigurationTarget.Global);
+}
+
 function cfg<T>(key: string, fallback: T): T {
   return vscode.workspace.getConfiguration('quorvox').get<T>(key, fallback);
 }
@@ -51,20 +87,20 @@ function updateBar() {
   bar.backgroundColor = undefined;
   if (!stack || n === 0) {
     bar.text = '$(circle-slash) Quorvox' + tail;
-    bar.tooltip = 'В этой папке нет проекта для запуска: нужен package.json со скриптом dev/start, index.html (запущу как сайт) или quorvox.json';
+    bar.tooltip = tr('В этой папке нет проекта для запуска: нужен package.json со скриптом dev/start, index.html (запущу как сайт) или quorvox.json');
   } else if (stack.anyCrashed()) {
     bar.text = '$(error) Quorvox' + tail;
     bar.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
-    bar.tooltip = 'Что-то упало. Клик — остановить всё';
+    bar.tooltip = tr('Что-то упало. Клик — остановить всё');
   } else if (stack.anyRunning()) {
     const run = stack.runners.filter((r) => r.status === 'running').length;
     bar.text = `$(debug-stop) Quorvox ${run}/${n}` + tail;
-    bar.tooltip = 'Клик — остановить всё';
+    bar.tooltip = tr('Клик — остановить всё');
   } else {
     bar.text = '$(play) Quorvox' + tail;
-    bar.tooltip = `Запустить сервисы: ${stack.runners.map((r) => r.def.name).join(', ')}`;
+    bar.tooltip = tr('Запустить сервисы: {0}', stack.runners.map((r) => r.def.name).join(', '));
   }
-  if (issues) bar.tooltip += `\nПроверки: ${issues} замечаний (смотри панель Quorvox → Проверки)`;
+  if (issues) bar.tooltip += tr('\nПроверки: {0} замечаний (смотри панель Quorvox → Проверки)', issues);
   bar.show();
 }
 
@@ -89,11 +125,11 @@ function runChecks(typing = false) {
     report = dir ? analyzeProject(dir, (stack?.runners ?? []).map((r) => ({ name: r.def.name, cwd: r.def.cwd })), dirtyOverrides()) : null;
   } catch (e) {
     report = null;
-    out.appendLine(`[quorvox] проверки не отработали: ${(e as Error).message}`);
+    out.appendLine(tr('[quorvox] проверки не отработали: {0}', (e as Error).message));
   }
   lastCheckMs = Date.now() - t0;
   checksTree.set(report);
-  if (checksView_) checksView_.description = report ? `маршрутов ${report.stats.routes} · запросов ${report.stats.calls}` : '';
+  if (checksView_) checksView_.description = report ? tr('маршрутов {0} · запросов {1}', report.stats.routes, report.stats.calls) : '';
   refresh();
   editor?.publish();
   if (!typing && mapPanel.isOpen()) mapPanel.send();
@@ -113,10 +149,10 @@ function scheduleTyping() {
 async function editorToggle() {
   const c = vscode.workspace.getConfiguration('quorvox');
   const items = [
-    { label: 'Подчёркивание ошибок в коде', description: 'адрес API, имя класса, ссылка на файл', key: 'editor.diagnostics', picked: c.get('editor.diagnostics', true) },
-    { label: 'Автодополнение, переход к определению, подсказки', description: 'классы из CSS, адреса API, переменные .env', key: 'editor.completions', picked: c.get('editor.completions', true) },
+    { label: tr('Подчёркивание ошибок в коде'), description: tr('адрес API, имя класса, ссылка на файл'), key: 'editor.diagnostics', picked: c.get('editor.diagnostics', true) },
+    { label: tr('Автодополнение, переход к определению, подсказки'), description: tr('классы из CSS, адреса API, переменные .env'), key: 'editor.completions', picked: c.get('editor.completions', true) },
   ];
-  const picks = await vscode.window.showQuickPick(items, { canPickMany: true, placeHolder: 'Что включить в редакторе (галочка — включено)' });
+  const picks = await vscode.window.showQuickPick(items, { canPickMany: true, placeHolder: tr('Что включить в редакторе (галочка — включено)') });
   if (!picks) return;
   const on = new Set(picks.map((p) => p.key));
   for (const it of items) await c.update(it.key, on.has(it.key), vscode.ConfigurationTarget.Global);
@@ -153,7 +189,7 @@ async function rebuild() {
   stack?.on('proxy', (name: string, url: string) => {
     refresh();
     void vscode.window
-      .showInformationMessage(`${name}: открой ${url} — страница будет обновляться сама`, 'Открыть в браузере')
+      .showInformationMessage(tr('{0}: открой {1} — страница будет обновляться сама', name, url), tr('Открыть в браузере'))
       .then((pick) => {
         if (pick) void vscode.env.openExternal(vscode.Uri.parse(url));
       });
@@ -173,7 +209,7 @@ async function pickRunner(arg?: { name?: string }): Promise<ServiceRunner | unde
   if (stack.runners.length === 1) return stack.runners[0];
   const pick = await vscode.window.showQuickPick(
     stack.runners.map((r) => ({ label: r.def.name, description: r.status, r })),
-    { placeHolder: 'Какой сервис?' },
+    { placeHolder: tr('Какой сервис?') },
   );
   return pick?.r;
 }
@@ -181,7 +217,7 @@ async function pickRunner(arg?: { name?: string }): Promise<ServiceRunner | unde
 async function openUrl(r?: ServiceRunner) {
   const url = r?.proxy?.port ? `http://localhost:${r.proxy.port}` : null;
   if (!url) {
-    vscode.window.showInformationMessage('Адреса пока нет: запусти сервис и дождись, пока он напишет свой порт.');
+    vscode.window.showInformationMessage(tr('Адреса пока нет: запусти сервис и дождись, пока он напишет свой порт.'));
     return;
   }
   await vscode.env.openExternal(vscode.Uri.parse(url));
@@ -190,14 +226,14 @@ async function openUrl(r?: ServiceRunner) {
 async function openBrowser() {
   const list = stack?.urls() ?? [];
   if (list.length === 0) {
-    vscode.window.showInformationMessage('Адреса пока нет: запусти сервисы (▶) и дождись, пока сервер напишет свой порт.');
+    vscode.window.showInformationMessage(tr('Адреса пока нет: запусти сервисы (▶) и дождись, пока сервер напишет свой порт.'));
     return;
   }
   let url = list[0].url;
   if (list.length > 1) {
     const pick = await vscode.window.showQuickPick(
       list.map((x) => ({ label: x.name, description: x.url, url: x.url })),
-      { placeHolder: 'Что открыть?' },
+      { placeHolder: tr('Что открыть?') },
     );
     if (!pick) return;
     url = pick.url;
@@ -207,40 +243,41 @@ async function openBrowser() {
 
 // Телефон: открываем доступ к сервису из локальной сети и показываем QR. Только после явного «да».
 async function phoneOn(arg?: { name?: string }) {
+  if (!requireTrust(tr('открывать доступ с телефона'))) return;
   const live = stack?.runners.filter((r) => r.proxy?.port) ?? [];
   let r = live.find((x) => x.def.name === arg?.name);
   if (!r && live.length === 1) r = live[0];
   if (!r && live.length > 1) {
     const pick = await vscode.window.showQuickPick(
       live.map((x) => ({ label: x.def.name, r: x })),
-      { placeHolder: 'Какой сервис открыть на телефоне?' },
+      { placeHolder: tr('Какой сервис открыть на телефоне?') },
     );
     r = pick?.r;
   }
   if (!r) {
     if (live.length === 0) {
-      vscode.window.showInformationMessage('Сначала запусти сервис и дождись, пока он напишет свой порт (появится адрес с автообновлением).');
+      vscode.window.showInformationMessage(tr('Сначала запусти сервис и дождись, пока он напишет свой порт (появится адрес с автообновлением).'));
     }
     return;
   }
   if (!r.proxy?.lanUrl()) {
     const ok = await vscode.window.showWarningMessage(
-      `Открыть доступ к «${r.def.name}» для устройств в вашей Wi-Fi сети?`,
+      tr('Открыть доступ к «{0}» для устройств в вашей Wi-Fi сети?', r.def.name),
       {
         modal: true,
         detail:
-          'Пока доступ включён, любой человек в вашей локальной сети сможет открыть этот проект. Выключить можно в любой момент; при остановке сервисов он выключится сам.',
+          tr('Пока доступ включён, любой человек в вашей локальной сети сможет открыть этот проект. Выключить можно в любой момент; при остановке сервисов он выключится сам.'),
       },
-      'Открыть доступ',
+      tr('Открыть доступ'),
     );
-    if (ok !== 'Открыть доступ') return;
+    if (ok !== tr('Открыть доступ')) return;
   }
   const url = await stack!.phoneOn(r.def.name);
   if (!url) {
-    vscode.window.showErrorMessage('Не нашёл адрес компьютера в локальной сети. Подключись к Wi-Fi или кабелю и попробуй ещё раз.');
+    vscode.window.showErrorMessage(tr('Не нашёл адрес компьютера в локальной сети. Подключись к Wi-Fi или кабелю и попробуй ещё раз.'));
     return;
   }
-  out.appendLine(`[quorvox] телефон: ${r.def.name} открыт по ${url} (только для частных сетей)`);
+  out.appendLine(tr('[quorvox] телефон: {0} открыт по {1} (только для частных сетей)', r.def.name, url));
   dash.show();
   // окно дашборда могло только что открыться: даём ему загрузиться
   const info = { name: r.def.name, url, svg: qrSvg(url) };
@@ -253,7 +290,7 @@ function phoneOff(name?: string) {
   if (!r) return;
   stack!.phoneOff(r.def.name);
   dash.qr(null);
-  out.appendLine(`[quorvox] телефон: доступ к ${r.def.name} из сети выключен`);
+  out.appendLine(tr('[quorvox] телефон: доступ к {0} из сети выключен', r.def.name));
 }
 
 // ---------- деплой на VPS ----------
@@ -284,7 +321,7 @@ async function createDeployTemplate(dir: string) {
     try {
       json = JSON.parse(readFileSync(file, 'utf8'));
     } catch {
-      vscode.window.showErrorMessage('quorvox.json не читается (ошибка в JSON). Поправь файл и повтори.');
+      vscode.window.showErrorMessage(tr('quorvox.json не читается (ошибка в JSON). Поправь файл и повтори.'));
       return;
     }
   }
@@ -299,20 +336,21 @@ async function createDeployTemplate(dir: string) {
   writeFileSync(file, JSON.stringify(json, null, 2) + '\n', 'utf8');
   await vscode.window.showTextDocument(vscode.Uri.file(file));
   vscode.window.showInformationMessage(
-    'Заполни host, path, restart и check под свой сервер и снова нажми «Выложить». Вход только по ключу ssh, пароли тут не нужны и не хранятся.',
+    tr('Заполни host, path, restart и check под свой сервер и снова нажми «Выложить». Вход только по ключу ssh, пароли тут не нужны и не хранятся.'),
   );
 }
 
 async function deploy() {
   const dir = root();
   if (!dir) return;
+  if (!requireTrust(tr('выкладывать на сервер'))) return;
   const { config, problems } = readDeployConfig(dir);
   if (problems.length) {
     vscode.window.showErrorMessage('quorvox.json → deploy: ' + problems.join('; '));
     return;
   }
   if (!config) {
-    const pick = await vscode.window.showInformationMessage('Деплой ещё не настроен. Создать шаблон настроек в quorvox.json?', 'Создать шаблон');
+    const pick = await vscode.window.showInformationMessage(tr('Деплой ещё не настроен. Создать шаблон настроек в quorvox.json?'), tr('Создать шаблон'));
     if (pick) await createDeployTemplate(dir);
     return;
   }
@@ -322,17 +360,17 @@ async function deploy() {
   const errors = report?.findings.filter((f) => f.severity === 'error') ?? [];
   if (errors.length) {
     const go = await vscode.window.showWarningMessage(
-      `В проверках проекта ${errors.length} ошибок. Выкладывать с ними?`,
+      tr('В проверках проекта {0} ошибок. Выкладывать с ними?', errors.length),
       { modal: true, detail: errors.slice(0, 6).map((f) => '• ' + f.message).join('\n') },
-      'Всё равно выложить',
+      tr('Всё равно выложить'),
     );
-    if (go !== 'Всё равно выложить') return;
+    if (go !== tr('Всё равно выложить')) return;
   }
 
   // 2. что поедет на сервер
   const plan = planFiles(dir, config);
   if (plan.tooBig) {
-    vscode.window.showErrorMessage(`Слишком много для выкладки (${plan.tooBig}). Добавь лишнее в deploy.exclude в quorvox.json.`);
+    vscode.window.showErrorMessage(tr('Слишком много для выкладки ({0}). Добавь лишнее в deploy.exclude в quorvox.json.', plan.tooBig));
     return;
   }
   const secrets = findSecrets(dir, plan.files);
@@ -340,26 +378,26 @@ async function deploy() {
   const detail = [
     ...describePlan(config, plan),
     '',
-    `Не уйдёт на сервер: ${skipped || 'ничего лишнего не нашёл'}.`,
-    ...(secrets.length ? ['', '⚠ В отправляемых файлах похоже на секреты: ' + secrets.map((s) => `${s.file} (${s.kind})`).join(', ') + '. Лучше убрать их в .env.'] : []),
+    tr('Не уйдёт на сервер: {0}.', skipped || tr('ничего лишнего не нашёл')),
+    ...(secrets.length ? ['', tr('⚠ В отправляемых файлах похоже на секреты: ') + secrets.map((s) => `${s.file} (${s.kind})`).join(', ') + tr('. Лучше убрать их в .env.')] : []),
     ...(plan.warnings.length ? ['', ...plan.warnings] : []),
   ].join('\n');
-  const goLabel = secrets.length ? 'Выложить, несмотря на секреты' : 'Выложить';
-  const choice = await vscode.window.showWarningMessage(`Выложить проект на ${config.user}@${config.host}?`, { modal: true, detail }, goLabel, 'Сухой прогон');
+  const goLabel = secrets.length ? tr('Выложить, несмотря на секреты') : tr('Выложить');
+  const choice = await vscode.window.showWarningMessage(tr('Выложить проект на {0}@{1}?', config.user, config.host), { modal: true, detail }, goLabel, tr('Сухой прогон'));
   if (!choice) return;
 
   dash.show();
-  if (choice === 'Сухой прогон') {
-    logDeploy('— сухой прогон: ничего не отправляется —');
+  if (choice === tr('Сухой прогон')) {
+    logDeploy(tr('— сухой прогон: ничего не отправляется —'));
     for (const l of describePlan(config, plan)) logDeploy(l);
-    logDeploy('Файлы (первые 40): ' + plan.files.slice(0, 40).join(', ') + (plan.files.length > 40 ? ` … и ещё ${plan.files.length - 40}` : ''));
-    for (const s of plan.skipped.slice(0, 25)) logDeploy(`не отправлю: ${s.what} (${s.why})`);
+    logDeploy(tr('Файлы (первые 40): ') + plan.files.slice(0, 40).join(', ') + (plan.files.length > 40 ? tr(' … и ещё {0}', plan.files.length - 40) : ''));
+    for (const s of plan.skipped.slice(0, 25)) logDeploy(tr('не отправлю: {0} ({1})', s.what, s.why));
     return;
   }
 
   // 3. выкладка
   const push = (create: boolean) =>
-    vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Quorvox: выкладываю на сервер…' }, () =>
+    vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: tr('Quorvox: выкладываю на сервер…') }, () =>
       deployRelease(dir, config, plan.files, { run: realRun, log: logDeploy }, { create }),
     );
   let res = await push(false);
@@ -367,10 +405,10 @@ async function deploy() {
     // первая выкладка: папки на сервере ещё нет. Создаём только после отдельного «да»
     const mk = await vscode.window.showWarningMessage(
       res.message,
-      { modal: true, detail: `Создам папку ${config.path} на ${config.host} и выложу туда проект. Больше ничего на сервере не меняется, кроме команд из quorvox.json (${[config.install, config.restart, config.check].filter(Boolean).join('; ') || 'их нет'}).` },
-      'Создать папку и выложить',
+      { modal: true, detail: tr('Создам папку {0} на {1} и выложу туда проект. Больше ничего на сервере не меняется, кроме команд из quorvox.json ({2}).', config.path, config.host, [config.install, config.restart, config.check].filter(Boolean).join('; ') || tr('их нет')) },
+      tr('Создать папку и выложить'),
     );
-    if (mk !== 'Создать папку и выложить') return;
+    if (mk !== tr('Создать папку и выложить')) return;
     res = await push(true);
   }
   logDeploy(res.ok ? `✔ ${res.message}` : `✖ ${res.message}`);
@@ -379,19 +417,19 @@ async function deploy() {
       // старая версия лежит копией на сервере; решение за человеком, оно запоминается (плашка на дашборде)
       setPending({ host: config.host, ts: res.backup, at: Date.now() });
       const pick = await vscode.window.showInformationMessage(
-        `Выложено и проверено на ${config.host}. Старая версия сохранена на сервере. Всё работает?`,
-        'Работает, удалить копию',
-        'Откатить',
+        tr('Выложено и проверено на {0}. Старая версия сохранена на сервере. Всё работает?', config.host),
+        tr('Работает, удалить копию'),
+        tr('Откатить'),
       );
-      if (pick === 'Работает, удалить копию') await releaseOk();
-      else if (pick === 'Откатить') await rollback(res.backup);
+      if (pick === tr('Работает, удалить копию')) await releaseOk();
+      else if (pick === tr('Откатить')) await rollback(res.backup);
     } else {
-      vscode.window.showInformationMessage(`Выложено и проверено на ${config.host}. Это первая выкладка: старой версии не было, откатывать некуда.`);
+      vscode.window.showInformationMessage(tr('Выложено и проверено на {0}. Это первая выкладка: старой версии не было, откатывать некуда.', config.host));
     }
     return;
   }
   const canRollback = !!res.backup && ['install', 'restart', 'check'].includes(res.failedAt ?? '');
-  const pick = await vscode.window.showErrorMessage(res.message, ...(canRollback ? ['Откатить на прошлую версию'] : []));
+  const pick = await vscode.window.showErrorMessage(res.message, ...(canRollback ? [tr('Откатить на прошлую версию')] : []));
   if (pick) await rollback(res.backup);
 }
 
@@ -400,16 +438,16 @@ async function releaseOk() {
   const dir = root();
   const p = getPending();
   if (!dir || !p) {
-    vscode.window.showInformationMessage('Нет выкладки, которая ждёт подтверждения.');
+    vscode.window.showInformationMessage(tr('Нет выкладки, которая ждёт подтверждения.'));
     return;
   }
   const { config } = readDeployConfig(dir);
   if (!config) {
-    vscode.window.showErrorMessage('Деплой не настроен в quorvox.json.');
+    vscode.window.showErrorMessage(tr('Деплой не настроен в quorvox.json.'));
     return;
   }
   dash.show();
-  const res = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Quorvox: удаляю копию старой версии…' }, () =>
+  const res = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: tr('Quorvox: удаляю копию старой версии…') }, () =>
     confirmRelease(config, p.ts, { run: realRun, log: logDeploy }),
   );
   logDeploy(res.ok ? `✔ ${res.message}` : `✖ ${res.message}`);
@@ -425,22 +463,23 @@ async function releaseOk() {
 async function rollback(ts?: string) {
   const dir = root();
   if (!dir) return;
+  if (!requireTrust(tr('откатывать сервер'))) return;
   const { config, problems } = readDeployConfig(dir);
   if (!config) {
-    vscode.window.showErrorMessage(problems.length ? 'quorvox.json → deploy: ' + problems.join('; ') : 'Деплой не настроен в quorvox.json.');
+    vscode.window.showErrorMessage(problems.length ? 'quorvox.json → deploy: ' + problems.join('; ') : tr('Деплой не настроен в quorvox.json.'));
     return;
   }
   const target = ts ?? getPending()?.ts;
   if (!ts) {
     const ok = await vscode.window.showWarningMessage(
-      `Откатить ${config.host}:${config.path} на ${target ? 'копию последней выкладки' : 'последнюю сохранённую копию'}?`,
-      { modal: true, detail: 'Файлы из копии вернутся на место, потом выполнится перезапуск и проверка. Новые файлы, которых не было в копии, останутся на сервере.' },
-      'Откатить',
+      tr('Откатить {0}:{1} на {2}?', config.host, config.path, target ? tr('копию последней выкладки') : tr('последнюю сохранённую копию')),
+      { modal: true, detail: tr('Файлы из копии вернутся на место, потом выполнится перезапуск и проверка. Новые файлы, которых не было в копии, останутся на сервере.') },
+      tr('Откатить'),
     );
-    if (ok !== 'Откатить') return;
+    if (ok !== tr('Откатить')) return;
   }
   dash.show();
-  const res = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Quorvox: откатываю…' }, () =>
+  const res = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: tr('Quorvox: откатываю…') }, () =>
     rollbackRelease(config, { run: realRun, log: logDeploy }, target),
   );
   logDeploy(res.ok ? `✔ ${res.message}` : `✖ ${res.message}`);
@@ -457,20 +496,21 @@ async function envExample() {
   if (!dir) return;
   const r = buildEnvExample(dir);
   if (!r.added.length) {
-    vscode.window.showInformationMessage(r.existing ? '.env.example уже содержит все переменные из кода.' : 'В серверном коде не нашёл переменных окружения.');
+    vscode.window.showInformationMessage(r.existing ? tr('.env.example уже содержит все переменные из кода.') : tr('В серверном коде не нашёл переменных окружения.'));
     return;
   }
   const file = join(dir, '.env.example');
   writeFileSync(file, r.text, 'utf8');
   await vscode.window.showTextDocument(vscode.Uri.file(file));
-  vscode.window.showInformationMessage(`${r.existing ? 'Дописал в' : 'Создал'} .env.example: ${r.added.length} переменных (только имена, без значений).`);
+  vscode.window.showInformationMessage(tr('{0} .env.example: {1} переменных (только имена, без значений).', r.existing ? tr('Дописал в') : tr('Создал'), r.added.length));
   runChecks();
 }
 
 function startAll() {
+  if (!requireTrust(tr('запускать сервисы'))) return;
   if (!stack || stack.runners.length === 0) {
     vscode.window.showInformationMessage(
-      'В этой папке нет проекта для запуска. Подойдёт: package.json со скриптом dev или start, index.html (запущу как сайт) или quorvox.json. Для не-веб-папки это нормально.',
+      tr('В этой папке нет проекта для запуска. Подойдёт: package.json со скриптом dev или start, index.html (запущу как сайт) или quorvox.json. Для не-веб-папки это нормально.'),
     );
     return;
   }
@@ -508,11 +548,11 @@ async function fromDashboard(msg: { cmd: string; name?: string; file?: string; l
     case 'stopAll':
       return void (await stack?.stopAll());
     case 'start':
-      return r?.start();
+      return requireTrust(tr('запускать сервис')) ? r?.start() : undefined;
     case 'stop':
       return void (await r?.stop());
     case 'restart':
-      return void (await r?.restart());
+      return requireTrust(tr('перезапускать сервис')) ? void (await r?.restart()) : undefined;
     case 'open':
       return openUrl(r);
     case 'clear':
@@ -531,7 +571,7 @@ export async function activate(ctx: vscode.ExtensionContext) {
     checksView_ = vscode.window.createTreeView('quorvox.checks', { treeDataProvider: checksTree });
   } catch {
     // окно подхватило новый код, но не новые панели — пока не сделан Reload Window, живём без этого вида
-    out.appendLine('[quorvox] вид «Проверки» не зарегистрирован: перезагрузи окно (Developer: Reload Window)');
+    out.appendLine(tr('[quorvox] вид «Проверки» не зарегистрирован: перезагрузи окно (Developer: Reload Window)'));
   }
   mapPanel = new MapPanel({ root, openFile: (file, line) => void openFinding(file, line) });
   editor = registerEditor(ctx, {
@@ -547,7 +587,15 @@ export async function activate(ctx: vscode.ExtensionContext) {
     command: (m) => void fromDashboard(m),
   });
 
+  applyLanguage(false);
+  const imp = registerImport(ctx, { root, log: (l) => out.appendLine(l), rescan: rebuild });
   ctx.subscriptions.push(
+    ...imp.disposables,
+    vscode.workspace.onDidGrantWorkspaceTrust(() => refresh()),
+    vscode.commands.registerCommand('quorvox.language', pickLanguage),
+    vscode.workspace.onDidChangeConfiguration((ev) => {
+      if (ev.affectsConfiguration('quorvox.language')) applyLanguage(true);
+    }),
     out,
     bar,
     { dispose: () => dash.dispose() },
@@ -555,6 +603,14 @@ export async function activate(ctx: vscode.ExtensionContext) {
     { dispose: () => checksView_?.dispose() },
     { dispose: () => mapPanel.dispose() },
     { dispose: () => clearTimeout(checkTimer) },
+    ...registerMove(ctx, {
+      root,
+      checkCount: () => {
+        runChecks();
+        return issueCount();
+      },
+      log: (l) => out.appendLine(l),
+    }),
     vscode.commands.registerCommand('quorvox.map', () => mapPanel.show()),
     vscode.commands.registerCommand('quorvox.editorToggle', editorToggle),
     vscode.workspace.onDidChangeTextDocument((e) => {
@@ -577,9 +633,9 @@ export async function activate(ctx: vscode.ExtensionContext) {
     vscode.commands.registerCommand('quorvox.showLogs', () => out.show(true)),
     vscode.commands.registerCommand('quorvox.open', openBrowser),
     vscode.commands.registerCommand('quorvox.rescan', rebuild),
-    vscode.commands.registerCommand('quorvox.service.start', async (a?: { name?: string }) => (await pickRunner(a))?.start()),
+    vscode.commands.registerCommand('quorvox.service.start', async (a?: { name?: string }) => (requireTrust(tr('запускать сервис')) ? (await pickRunner(a))?.start() : undefined)),
     vscode.commands.registerCommand('quorvox.service.stop', async (a?: { name?: string }) => void (await (await pickRunner(a))?.stop())),
-    vscode.commands.registerCommand('quorvox.service.restart', async (a?: { name?: string }) => void (await (await pickRunner(a))?.restart())),
+    vscode.commands.registerCommand('quorvox.service.restart', async (a?: { name?: string }) => void (requireTrust(tr('перезапускать сервис')) ? await (await pickRunner(a))?.restart() : undefined)),
     vscode.commands.registerCommand('quorvox.service.open', async (a?: { name?: string }) => openUrl(await pickRunner(a))),
   );
 
@@ -610,6 +666,7 @@ export async function activate(ctx: vscode.ExtensionContext) {
   ctx.subscriptions.push(watcher);
 
   await rebuild();
+  imp.resume();
 }
 
 export async function deactivate() {

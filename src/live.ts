@@ -3,6 +3,7 @@ import net from 'node:net';
 import os from 'node:os';
 import { EventEmitter } from 'node:events';
 import type { Duplex } from 'node:stream';
+import { tr } from './i18n.ts';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -13,7 +14,7 @@ const TAG = `<script src="${CLIENT_URL}"></script>`;
 
 // Скрипт, который подмешиваем в страницы: обновляет вкладку и присылает ошибки браузера
 // (в том числе с телефона) обратно в VS Code. Внутри нет обратных кавычек и ${ — это шаблонная строка.
-const CLIENT_JS = `(function () {
+const clientJs = () => `(function () {
   var LOG = '${LOG_URL}';
   function send(level, text) {
     try {
@@ -26,7 +27,7 @@ const CLIENT_JS = `(function () {
   es.onmessage = function () { location.reload(); };
   window.addEventListener('error', function (e) {
     var where = e.filename ? ' (' + String(e.filename).split('/').pop() + ':' + e.lineno + ')' : '';
-    send('error', (e.message || 'ошибка') + where);
+    send('error', (e.message || '${tr('ошибка')}') + where);
   });
   window.addEventListener('unhandledrejection', function (e) {
     var r = e.reason;
@@ -54,7 +55,7 @@ const CLIENT_JS = `(function () {
         if (!mine && res.status >= 400 && res.status !== 401) send(res.status >= 500 ? 'error' : 'warn', method + ' ' + short + ' → ' + res.status);
         return res;
       }, function (err) {
-        if (!mine) send('error', method + ' ' + short + ' → сеть недоступна' + (err && err.message ? ': ' + err.message : ''));
+        if (!mine) send('error', method + ' ' + short + ' → ${tr('сеть недоступна')}' + (err && err.message ? ': ' + err.message : ''));
         throw err;
       });
     };
@@ -196,7 +197,7 @@ export class LiveProxy extends EventEmitter {
     if (this.logTimes.length >= 30) {
       if (!this.logMuted) {
         this.logMuted = true;
-        this.emit('browserlog', { level: 'warn', text: 'слишком много сообщений из браузера, часть пропускаю', page: '', device: 'browser' } as BrowserLog);
+        this.emit('browserlog', { level: 'warn', text: tr('слишком много сообщений из браузера, часть пропускаю'), page: '', device: 'browser' } as BrowserLog);
       }
       return false;
     }
@@ -295,7 +296,7 @@ export class LiveProxy extends EventEmitter {
   private handle(req: http.IncomingMessage, res: http.ServerResponse) {
     if (req.url === CLIENT_URL) {
       res.writeHead(200, { 'content-type': 'application/javascript; charset=utf-8', 'cache-control': 'no-store' });
-      res.end(CLIENT_JS);
+      res.end(clientJs());
       return;
     }
     if (req.method === 'POST' && req.url === LOG_URL) {
@@ -356,7 +357,7 @@ export class LiveProxy extends EventEmitter {
       if (res.headersSent) return res.destroy();
       res.writeHead(502, { 'content-type': 'text/html; charset=utf-8' });
       res.end(
-        `<p style="font-family:sans-serif">Quorvox: сервис недоступен (${e.message}). Возможно, он перезапускается.</p>` +
+        tr('<p style="font-family:sans-serif">Quorvox: сервис недоступен ({0}). Возможно, он перезапускается.</p>', e.message) +
           `${TAG}<script>setTimeout(function(){location.reload()},1500)</script>`,
       );
     });

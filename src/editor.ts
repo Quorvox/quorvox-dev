@@ -14,6 +14,7 @@ import {
   routesForPath,
   cssRuleAt,
 } from './editorlogic.ts';
+import { tr } from './i18n.ts';
 
 // Подсказки прямо в редакторе: подчёркивания ошибок, автодополнение, переход к определению и подсказка при наведении.
 // Вся логика в editorlogic.ts и анализаторе; здесь только подключение к VS Code.
@@ -43,12 +44,16 @@ function refine(f: Finding, text: string): [number, number] | null {
     return m ? [m.index, m.index + m[0].length] : null;
   }
   if (f.kind === 'css') {
-    const name = /^Класс \.([\w-]+)/.exec(f.message)?.[1];
+    const name = f.ref;
     const i = name ? text.search(new RegExp(`(?<![\\w-])${name.replace(/[-]/g, '\\-')}(?![\\w-])`)) : -1;
     return name && i >= 0 ? [i, i + name.length] : null;
   }
+  if (f.kind === 'html') {
+    const i = f.ref ? text.indexOf(f.ref) : -1;
+    return f.ref && i >= 0 ? [i, i + f.ref.length] : null;
+  }
   if (f.kind === 'link') {
-    const ref = /ссылка на (\S+?)(?:,| выходит)/.exec(f.message)?.[1];
+    const ref = f.ref;
     const i = ref ? text.indexOf(ref) : -1;
     return ref && i >= 0 ? [i, i + ref.length] : null;
   }
@@ -67,7 +72,7 @@ function publishDiagnostics(collection: vscode.DiagnosticCollection, deps: Edito
     if (!f.file || !f.line) continue;
     // справочное (мёртвый CSS целиком, нет .env.example) не подчёркиваем: оно не про конкретную строку.
     // Опечатки в классах подчёркиваем всегда, даже «возможные»
-    if (f.severity === 'info' && !(f.kind === 'css' && f.message.startsWith('Класс'))) continue;
+    if (f.severity === 'info' && !(f.kind === 'css' && f.ref)) continue;
     const fsPath = join(dir, f.file);
     const doc = open.get(fsPath.toLowerCase());
     const lineNo = f.line - 1;
@@ -146,8 +151,8 @@ class Completions implements vscode.CompletionItemProvider {
     if (ec && index.env.length) {
       return index.env.map((e) => {
         const it = new vscode.CompletionItem(e.name, vscode.CompletionItemKind.Variable);
-        it.detail = e.defined ? 'описана в .env' : 'нет ни в одном .env';
-        it.documentation = new vscode.MarkdownString(`Используется в \`${e.file}:${e.line}\`${e.required ? ', без запасного значения' : ''}.`);
+        it.detail = e.defined ? tr('описана в .env') : tr('нет ни в одном .env');
+        it.documentation = new vscode.MarkdownString(tr('Используется в `{0}:{1}`{2}.', e.file, e.line, e.required ? tr(', без запасного значения') : ''));
         return it;
       });
     }
@@ -219,7 +224,7 @@ class Hovers implements vscode.HoverProvider {
     if (cls) {
       const def = index.classes.find((c) => c.name === cls.name);
       const range = new vscode.Range(pos.line, cls.start, pos.line, cls.end);
-      if (!def) return new vscode.Hover(new vscode.MarkdownString(`Класса **.${cls.name}** нет ни в одном CSS проекта.`), range);
+      if (!def) return new vscode.Hover(new vscode.MarkdownString(tr('Класса **.{0}** нет ни в одном CSS проекта.', cls.name)), range);
       const md = new vscode.MarkdownString(`**.${cls.name}** · \`${def.file}:${def.line}\`\n\n`);
       md.appendCodeblock(cssRuleAt(readLines(dir, def.file), def.line), 'css');
       return new vscode.Hover(md, range);
@@ -229,7 +234,7 @@ class Hovers implements vscode.HoverProvider {
     if (ap) {
       const hits = routesForPath(index, ap);
       const md = new vscode.MarkdownString();
-      if (!hits.length) md.appendMarkdown('Такого адреса на сервере **не нашёл**.');
+      if (!hits.length) md.appendMarkdown(tr('Такого адреса на сервере **не нашёл**.'));
       else for (const r of hits) md.appendMarkdown(`\`${r.method} ${r.full}\` → \`${r.file}:${r.line}\`  \n`);
       return new vscode.Hover(md);
     }
@@ -239,11 +244,11 @@ class Hovers implements vscode.HoverProvider {
       const e = index.env.find((x) => x.name === env.name);
       const range = new vscode.Range(pos.line, env.start, pos.line, env.end);
       const md = new vscode.MarkdownString();
-      if (!e) md.appendMarkdown(`Переменная **${env.name}**: в серверном коде не нашёл.`);
+      if (!e) md.appendMarkdown(tr('Переменная **{0}**: в серверном коде не нашёл.', env.name));
       else {
-        md.appendMarkdown(`Переменная **${e.name}**\n\n`);
-        md.appendMarkdown(e.defined ? '✔ описана в `.env`-файле проекта\n\n' : '⚠ не описана ни в одном `.env`\n\n');
-        md.appendMarkdown(e.required ? 'В коде используется **без запасного значения**.' : 'В коде есть запасное значение.');
+        md.appendMarkdown(tr('Переменная **{0}**\n\n', e.name));
+        md.appendMarkdown(e.defined ? tr('✔ описана в `.env`-файле проекта\n\n') : tr('⚠ не описана ни в одном `.env`\n\n'));
+        md.appendMarkdown(e.required ? tr('В коде используется **без запасного значения**.') : tr('В коде есть запасное значение.'));
       }
       return new vscode.Hover(md, range);
     }

@@ -1,7 +1,9 @@
 import * as vscode from 'vscode';
 import { randomBytes } from 'node:crypto';
 import { mapHtml } from './map-html.ts';
+import { localizeHtml } from './webi18n.ts';
 import { buildMap } from './projectmap.ts';
+import { tr } from './i18n.ts';
 
 export interface MapDeps {
   root(): string | undefined;
@@ -23,12 +25,12 @@ export class MapPanel {
       this.panel.reveal();
       return;
     }
-    const panel = vscode.window.createWebviewPanel('quorvox.map', 'Quorvox: карта', vscode.ViewColumn.Active, {
+    const panel = vscode.window.createWebviewPanel('quorvox.map', tr('Quorvox: карта'), vscode.ViewColumn.Active, {
       enableScripts: true,
       retainContextWhenHidden: true,
     });
     this.panel = panel;
-    panel.webview.html = mapHtml(randomBytes(16).toString('hex'));
+    panel.webview.html = localizeHtml(mapHtml(randomBytes(16).toString('hex')));
     panel.webview.onDidReceiveMessage((msg: { cmd: string; file?: string; line?: number }) => {
       if (msg.cmd === 'ready') {
         this.ready = true;
@@ -45,6 +47,14 @@ export class MapPanel {
     });
   }
 
+  // язык сменили: перерисовать вкладку на новом языке (страница сама попросит данные заново)
+  relocalize() {
+    if (!this.panel) return;
+    this.ready = false;
+    this.panel.title = tr('Quorvox: карта');
+    this.panel.webview.html = localizeHtml(mapHtml(randomBytes(16).toString('hex')));
+  }
+
   isOpen() {
     return this.panel !== null;
   }
@@ -54,7 +64,7 @@ export class MapPanel {
     if (!this.panel || !this.ready) return;
     const dir = this.deps.root();
     if (!dir) {
-      void this.panel.webview.postMessage({ type: 'error', message: 'нет открытой папки' });
+      void this.panel.webview.postMessage({ type: 'error', message: tr('нет открытой папки') });
       return;
     }
     try {

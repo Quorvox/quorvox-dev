@@ -5,6 +5,7 @@ import { StaticRunner } from './staticrunner.ts';
 import { LiveProxy, probeHttp } from './live.ts';
 import type { BrowserLog } from './live.ts';
 import type { ServiceDef } from './detect.ts';
+import { tr } from './i18n.ts';
 
 // серверные файлы — их правка требует рестарта
 const SERVER_EXT = new Set(['.js', '.mjs', '.cjs', '.ts', '.json', '.env']);
@@ -71,13 +72,13 @@ export class Stack extends EventEmitter {
       r.proxy = p;
       // ошибки из браузера (с компьютера и с телефона) идут в те же логи, что и сервер
       p.on('browserlog', (b: BrowserLog) => {
-        const who = b.device === 'phone' ? '📱 [телефон]' : '🌐 [браузер]';
+        const who = b.device === 'phone' ? tr('📱 [телефон]') : tr('🌐 [браузер]');
         this.emit('log', r.def.name, `${who} ${b.level}: ${b.text}${b.page ? ' — ' + b.page : ''}`);
       });
       try {
         const lp = await p.listen();
         const url = `http://localhost:${lp}`;
-        this.emit('log', r.def.name, `live-reload: открывай ${url} — страница будет обновляться сама`);
+        this.emit('log', r.def.name, tr('live-reload: открывай {0} — страница будет обновляться сама', url));
         this.emit('proxy', r.def.name, url);
       } catch {
         p.close();
@@ -197,12 +198,12 @@ export class Stack extends EventEmitter {
         const recent = (this.history.get(r) ?? []).filter((t) => now - t < WINDOW_MS);
         if (recent.length >= MAX_RESTARTS) {
           this.history.set(r, recent);
-          this.emit('log', r.def.name, `слишком частые перезапуски (${base}), пропускаю — похоже на цикл`);
+          this.emit('log', r.def.name, tr('слишком частые перезапуски ({0}), пропускаю — похоже на цикл', base));
           return;
         }
         recent.push(now);
         this.history.set(r, recent);
-        this.emit('log', r.def.name, `перезапуск: изменён ${base}`);
+        this.emit('log', r.def.name, tr('перезапуск: изменён {0}', base));
         this.busy.add(r);
         void r
           .restart()

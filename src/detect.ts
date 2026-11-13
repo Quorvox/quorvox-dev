@@ -44,6 +44,38 @@ function fromPackage(dir: string, name: string): ServiceDef | null {
   };
 }
 
+// Python-сервер: Flask или FastAPI. Запускаем через встроенную перезагрузку фреймворка; если рядом есть venv, берём его python
+const PY_ENTRIES = ['app.py', 'main.py', 'server.py', 'api.py', 'wsgi.py', 'run.py', 'application.py', 'app/main.py', 'app/__init__.py', 'src/main.py', 'src/app.py'];
+
+function pythonOf(dir: string): string {
+  const win = process.platform === 'win32';
+  for (const v of ['.venv', 'venv', 'env']) {
+    const exe = win ? join(v, 'Scripts', 'python.exe') : join(v, 'bin', 'python');
+    if (existsSync(join(dir, exe))) return win ? exe : './' + exe;
+  }
+  return win ? 'python' : 'python3';
+}
+
+export function fromPython(dir: string, name: string): ServiceDef | null {
+  for (const entry of PY_ENTRIES) {
+    const file = join(dir, entry);
+    if (!existsSync(file)) continue;
+    let text: string;
+    try {
+      text = readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    const m = /^\s*(\w+)\s*(?::[^=\n]+)?=\s*(?:[\w.]+\.)?(Flask|FastAPI)\s*\(/m.exec(text);
+    if (!m) continue;
+    const mod = entry.replace(/\.py$/, '').replace(/\/__init__$/, '').split('/').join('.');
+    const py = pythonOf(dir);
+    const command = m[2] === 'FastAPI' ? py + ' -m uvicorn ' + mod + ':' + m[1] + ' --reload --port 8000' : py + ' -m flask --app ' + mod + ':' + m[1] + ' run --debug --port 5000';
+    return { name, cwd: dir, command, selfWatch: true, liveReload: true };
+  }
+  return null;
+}
+
 // сайт без бэкенда: ищем index.html в корне и в типичных папках, иначе любые html в корне
 const STATIC_DIRS = ['', 'public', 'dist', 'docs', 'www', 'site', 'src', 'app'];
 
@@ -92,6 +124,10 @@ export function detectServices(root: string): ServiceDef[] {
   const found: ServiceDef[] = [];
   const rootSvc = fromPackage(root, basename(root));
   if (rootSvc) found.push(rootSvc);
+  else {
+    const py = fromPython(root, basename(root));
+    if (py) found.push(py);
+  }
 
   let entries;
   try {
@@ -101,7 +137,7 @@ export function detectServices(root: string): ServiceDef[] {
   }
   for (const e of entries) {
     if (!e.isDirectory() || e.name.startsWith('.') || SKIP_DIRS.has(e.name)) continue;
-    const svc = fromPackage(join(root, e.name), e.name);
+    const svc = fromPackage(join(root, e.name), e.name) ?? fromPython(join(root, e.name), e.name);
     if (svc) found.push(svc);
   }
   // запускать нечего, но это сайт из HTML-файлов — раздаём его сами

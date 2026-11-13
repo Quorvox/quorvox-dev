@@ -1,8 +1,8 @@
 {
   "name": "quorvox-dev",
   "displayName": "Quorvox Dev",
-  "description": "Одна кнопка поднимает проект, карта объясняет как всё связано (CSS, фронт, бэк, база), проверки, QR для телефона и выкладка на VPS",
-  "version": "0.9.0",
+  "description": "%description%",
+  "version": "0.11.0",
   "publisher": "QuorvoxTeam",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -30,7 +30,12 @@
     "mobile",
     "autocomplete",
     "diagnostics",
-    "project map"
+    "project map",
+    "flask",
+    "fastapi",
+    "python",
+    "refactor",
+    "move files"
   ],
   "engines": {
     "vscode": "^1.90.0"
@@ -39,6 +44,12 @@
     "Other",
     "Linters"
   ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "%untrusted%"
+    }
+  },
   "main": "./dist/extension.js",
   "activationEvents": [
     "onStartupFinished"
@@ -57,109 +68,129 @@
       "quorvox": [
         {
           "id": "quorvox.services",
-          "name": "Сервисы"
+          "name": "%view.services%"
         },
         {
           "id": "quorvox.checks",
-          "name": "Проверки"
+          "name": "%view.checks%"
         }
       ]
     },
     "viewsWelcome": [
       {
         "view": "quorvox.services",
-        "contents": "В этой папке нет проекта для запуска.\nПодойдёт package.json со скриптом dev или start, страница index.html (запущу как сайт) или файл quorvox.json.\n[Пересканировать](command:quorvox.rescan)",
+        "contents": "%welcome%",
         "when": "quorvox.noServices"
       }
     ],
     "commands": [
       {
         "command": "quorvox.toggle",
-        "title": "Quorvox: Запустить / остановить всё",
+        "title": "%cmd.toggle%",
         "icon": "$(debug-start)"
       },
       {
         "command": "quorvox.dashboard",
-        "title": "Quorvox: Открыть дашборд",
+        "title": "%cmd.dashboard%",
         "icon": "$(layout)"
       },
       {
         "command": "quorvox.open",
-        "title": "Quorvox: Открыть в браузере (с автообновлением)",
+        "title": "%cmd.open%",
         "icon": "$(globe)"
       },
       {
         "command": "quorvox.showLogs",
-        "title": "Quorvox: Показать логи в панели «Вывод»"
+        "title": "%cmd.showLogs%"
       },
       {
         "command": "quorvox.rescan",
-        "title": "Quorvox: Пересканировать проект",
+        "title": "%cmd.rescan%",
         "icon": "$(refresh)"
       },
       {
         "command": "quorvox.check",
-        "title": "Quorvox: Проверить проект",
+        "title": "%cmd.check%",
         "icon": "$(checklist)"
       },
       {
         "command": "quorvox.map",
-        "title": "Quorvox: Карта проекта (как всё связано)",
+        "title": "%cmd.map%",
         "icon": "$(type-hierarchy)"
       },
       {
         "command": "quorvox.phone",
-        "title": "Quorvox: Открыть на телефоне (QR)",
+        "title": "%cmd.phone%",
         "icon": "$(device-mobile)"
       },
       {
         "command": "quorvox.phoneOff",
-        "title": "Quorvox: Выключить доступ с телефона"
+        "title": "%cmd.phoneOff%"
       },
       {
         "command": "quorvox.deploy",
-        "title": "Quorvox: Выложить на сервер (VPS)",
+        "title": "%cmd.deploy%",
         "icon": "$(cloud-upload)"
       },
       {
         "command": "quorvox.rollback",
-        "title": "Quorvox: Откатить сервер на прошлую версию"
+        "title": "%cmd.rollback%"
       },
       {
         "command": "quorvox.editorToggle",
-        "title": "Quorvox: Подсказки в редакторе (включить / выключить)"
+        "title": "%cmd.editorToggle%"
       },
       {
         "command": "quorvox.releaseOk",
-        "title": "Quorvox: Работает, удалить копию старой версии на сервере"
+        "title": "%cmd.releaseOk%"
       },
       {
         "command": "quorvox.envExample",
-        "title": "Quorvox: Создать .env.example из кода"
+        "title": "%cmd.envExample%"
+      },
+      {
+        "command": "quorvox.import",
+        "title": "%cmd.import%"
+      },
+      {
+        "command": "quorvox.onboard",
+        "title": "%cmd.onboard%"
+      },
+      {
+        "command": "quorvox.move",
+        "title": "%cmd.move%"
+      },
+      {
+        "command": "quorvox.moveUndo",
+        "title": "%cmd.moveUndo%"
       },
       {
         "command": "quorvox.openFinding",
-        "title": "Quorvox: Открыть место замечания"
+        "title": "%cmd.openFinding%"
       },
       {
         "command": "quorvox.service.start",
-        "title": "Quorvox: Запустить сервис",
+        "title": "%cmd.service.start%",
         "icon": "$(play)"
       },
       {
         "command": "quorvox.service.stop",
-        "title": "Quorvox: Остановить сервис",
+        "title": "%cmd.service.stop%",
         "icon": "$(debug-stop)"
       },
       {
         "command": "quorvox.service.restart",
-        "title": "Quorvox: Перезапустить сервис",
+        "title": "%cmd.service.restart%",
         "icon": "$(debug-restart)"
       },
       {
         "command": "quorvox.service.open",
-        "title": "Quorvox: Открыть сервис в браузере",
+        "title": "%cmd.service.open%",
         "icon": "$(globe)"
+      },
+      {
+        "command": "quorvox.language",
+        "title": "%cmd.language%"
       }
     ],
     "menus": {
@@ -167,6 +198,13 @@
         {
           "command": "quorvox.openFinding",
           "when": "false"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "quorvox.move",
+          "when": "workspaceFolderCount >= 1 && !explorerResourceIsRoot",
+          "group": "7_modification@9"
         }
       ],
       "view/title": [
@@ -199,6 +237,11 @@
           "command": "quorvox.rescan",
           "when": "view == quorvox.services",
           "group": "navigation@3"
+        },
+        {
+          "command": "quorvox.language",
+          "when": "view == quorvox.services",
+          "group": "9_language"
         }
       ],
       "view/item/context": [
@@ -235,22 +278,42 @@
         "quorvox.autoRestart": {
           "type": "boolean",
           "default": true,
-          "description": "Перезапускать сервис и обновлять страницу в браузере при изменении файлов"
+          "description": "%cfg.autoRestart%"
         },
         "quorvox.editor.diagnostics": {
           "type": "boolean",
           "default": true,
-          "description": "Подчёркивать в коде ошибки, которые находят проверки: адрес API, которого нет на сервере, неизвестный класс, битая ссылка на файл. Работает и по несохранённому тексту."
+          "description": "%cfg.editor.diagnostics%"
         },
         "quorvox.editor.completions": {
           "type": "boolean",
           "default": true,
-          "description": "Автодополнение классов из твоего CSS и адресов API с сервера (и переменных .env), переход к определению по Ctrl+клику и подсказка при наведении."
+          "description": "%cfg.editor.completions%"
+        },
+        "quorvox.fixLinksOnMove": {
+          "type": "boolean",
+          "default": true,
+          "description": "%cfg.fixLinksOnMove%"
         },
         "quorvox.showDashboardOnStart": {
           "type": "boolean",
           "default": true,
-          "description": "Открывать вкладку-дашборд с логами при запуске сервисов"
+          "description": "%cfg.showDashboardOnStart%"
+        },
+        "quorvox.language": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "ru",
+            "en"
+          ],
+          "enumDescriptions": [
+            "%cfg.language.auto%",
+            "Русский",
+            "English"
+          ],
+          "default": "auto",
+          "description": "%cfg.language%"
         }
       }
     }
@@ -260,7 +323,7 @@
     "watch": "node esbuild.mjs --watch",
     "check": "tsc --noEmit",
     "test:vscode": "node test-vscode/run.mjs",
-    "test": "node --test --test-timeout=60000 \"test/*.test.ts\"",
+    "test": "node --test --test-concurrency=1 --test-timeout=60000 \"test/*.test.ts\"",
     "package": "vsce package"
   },
   "devDependencies": {

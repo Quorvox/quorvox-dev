@@ -2,6 +2,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve, relative, sep } from 'node:path';
 import type { Finding } from './checks.ts';
 import type { WebFile } from './webfiles.ts';
+import { tr } from './i18n.ts';
 
 // Битые ссылки на файлы: картинки, стили, скрипты, шрифты и страницы, на которые указывают HTML и CSS.
 // Отдельно ловим разницу в регистре: на Windows работает, на сервере с Linux файл не найдётся.
@@ -157,9 +158,10 @@ export function checkLinks(root: string, web: { html: WebFile[]; css: WebFile[] 
             out.push({
               kind: 'link',
               severity: 'warn',
-              message: `${file.rel}: ссылка на ${ref} выходит за пределы папки сайта (${relative(root, siteRoot).split(sep).join('/') || '.'}). С диска откроется, а по адресу сайта и после выкладки нет`,
+              message: tr('{0}: ссылка на {1} выходит за пределы папки сайта ({2}). С диска откроется, а по адресу сайта и после выкладки нет', file.rel, ref, relative(root, siteRoot).split(sep).join('/') || '.'),
               file: file.rel,
               line,
+              ref,
             });
             continue;
           }
@@ -172,12 +174,13 @@ export function checkLinks(root: string, web: { html: WebFile[]; css: WebFile[] 
         out.push({
           kind: 'link',
           severity: 'warn',
-          message: `${file.rel}: ссылка на ${ref}, а файл называется ${wrongCase.actual}. Локально работает, на сервере с Linux не откроется (регистр букв важен)`,
+          message: tr('{0}: ссылка на {1}, а файл называется {2}. Локально работает, на сервере с Linux не откроется (регистр букв важен)', file.rel, ref, wrongCase.actual),
           file: file.rel,
           line,
+          ref,
         });
       } else {
-        out.push({ kind: 'link', severity: 'warn', message: `${file.rel}: ссылка на ${ref}, а такого файла нет`, file: file.rel, line });
+        out.push({ kind: 'link', severity: 'warn', message: tr('{0}: ссылка на {1}, а такого файла нет', file.rel, ref), file: file.rel, line, ref });
       }
     }
   };

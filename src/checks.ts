@@ -5,16 +5,20 @@ import type { WebFile } from './webfiles.ts';
 import { analyzeCss } from './cssmap.ts';
 import type { CssReport } from './cssmap.ts';
 import { checkLinks } from './links.ts';
+import { tr } from './i18n.ts';
+import { findPyRoutes, findPyEnv } from './pyroutes.ts';
+import { checkHtml } from './htmlhints.ts';
 
 // Локальные проверки проекта (Node/Express + fetch/api во фронте + .env).
 // Без запуска кода и без сети: просто читаем исходники регулярками.
 
 export interface Finding {
-  kind: 'route' | 'method' | 'env' | 'port' | 'css' | 'link';
+  kind: 'route' | 'method' | 'env' | 'port' | 'css' | 'link' | 'html';
   severity: 'error' | 'warn' | 'info';
   message: string;
   file?: string;
   line?: number;
+  ref?: string; // что именно подчёркивать в строке: имя класса или адрес ссылки (не зависит от языка сообщения)
 }
 
 export interface ServiceInfo {
@@ -101,6 +105,42 @@ function collect(root: string, overrides?: Overrides): Src[] {
         const starts = [0];
         for (let i = 0; i < src.length; i++) if (src.charCodeAt(i) === 10) starts.push(i + 1);
         out.push({ abs, rel, src, server, starts });
+      } catch {
+        // нечитаемый файл — пропускаем
+      }
+    }
+  }
+  return out;
+}
+
+const PY_SKIP = new Set(['venv', 'env', '__pycache__', 'site-packages', 'node_modules', 'dist', 'build', 'out', 'coverage']);
+
+// Python-файлы (Flask, FastAPI): берём только те, что похожи на сервер
+function collectPy(root: string, overrides?: Overrides): Src[] {
+  const out: Src[] = [];
+  const stack = [root];
+  while (stack.length && out.length < 1500) {
+    const dir = stack.pop()!;
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const e of entries) {
+      const abs = join(dir, e.name);
+      if (e.isDirectory()) {
+        if (!PY_SKIP.has(e.name) && !e.name.startsWith('.')) stack.push(abs);
+        continue;
+      }
+      if (!e.name.endsWith('.py')) continue;
+      try {
+        if (statSync(abs).size > MAX_SIZE) continue;
+        const src = overrides?.get(abs.toLowerCase()) ?? readFileSync(abs, 'utf8');
+        if (!/\b(?:Flask|FastAPI|Blueprint|APIRouter)\b|os\.(?:environ|getenv)/.test(src)) continue;
+        const starts = [0];
+        for (let i = 0; i < src.length; i++) if (src.charCodeAt(i) === 10) starts.push(i + 1);
+        out.push({ abs, rel: relative(root, abs).replace(/\\/g, '/'), src, server: true, starts });
       } catch {
         // нечитаемый файл — пропускаем
       }
@@ -369,7 +409,12 @@ export interface EnvUse {
 // какие переменные окружения читает серверный код и где
 export function envUsage(servers: Src[]): Map<string, EnvUse> {
   const used = new Map<string, EnvUse>();
-  for (const f of servers) {
+  const pyFiles = servers.filter((f) => f.abs.endsWith('.py'));
+  for (const u of findPyEnv(pyFiles.map((f) => ({ rel: f.rel, src: f.src })))) {
+    const prev = used.get(u.name);
+    if (!prev || (u.required && !prev.required)) used.set(u.name, { file: u.rel, line: u.line, required: u.required });
+  }
+  for (const f of servers.filter((x) => !x.abs.endsWith('.py'))) {
     for (const m of f.src.matchAll(/process\.env(?:\.([A-Z][A-Z0-9_]*)|\[\s*['"]([A-Z][A-Z0-9_]*)['"]\s*\])/g)) {
       const name = (m[1] ?? m[2])!;
       const before = f.src.slice(Math.max(0, m.index! - 14), m.index!);
@@ -393,7 +438,7 @@ function checkEnv(root: string, servers: Src[]): Finding[] {
       {
         kind: 'env',
         severity: 'info',
-        message: `В коде ${used.size} переменных окружения, но нет ни .env, ни .env.example — новичку не понятно, что задавать`,
+        message: tr('В коде {0} переменных окружения, но нет ни .env, ни .env.example — новичку не понятно, что задавать', used.size),
       },
     ];
   }
@@ -404,7 +449,7 @@ function checkEnv(root: string, servers: Src[]): Finding[] {
       out.push({
         kind: 'env',
         severity: 'warn',
-        message: `${name}: используется без запасного значения, но не описана ни в одном .env`,
+        message: tr('{0}: используется без запасного значения, но не описана ни в одном .env', name),
         file: u.file,
         line: u.line,
       });
@@ -441,7 +486,7 @@ function checkPorts(services: ServiceInfo[]): Finding[] {
   const out: Finding[] = [];
   for (const [port, names] of byPort) {
     if (names.length > 1) {
-      out.push({ kind: 'port', severity: 'error', message: `Порт ${port} занят сразу у нескольких сервисов: ${names.join(', ')} — второй не запустится` });
+      out.push({ kind: 'port', severity: 'error', message: tr('Порт {0} занят сразу у нескольких сервисов: {1} — второй не запустится', port, names.join(', ')) });
     }
   }
   return out;
@@ -457,9 +502,10 @@ function checkCss(css: CssReport): Finding[] {
     out.push({
       kind: 'css',
       severity: likely ? 'warn' : 'info',
-      message: `Класс .${t.name} используется в коде, но в CSS его нет (возможно, опечатка: .${t.like})`,
+      message: tr('Класс .{0} используется в коде, но в CSS его нет (возможно, опечатка: .{1})', t.name, t.like),
       file: t.file,
       line: t.line,
+      ref: t.name,
     });
   }
   for (const s of css.styles) {
@@ -468,7 +514,7 @@ function checkCss(css: CssReport): Finding[] {
     out.push({
       kind: 'css',
       severity: 'info',
-      message: `${s.file}: ${s.dead.length} из ${s.total} классов, похоже, нигде не используются (${names}${s.dead.length > 4 ? '…' : ''})`,
+      message: tr('{0}: {1} из {2} классов, похоже, нигде не используются ({3}{4})', s.file, s.dead.length, s.total, names, s.dead.length > 4 ? '…' : ''),
       file: s.file,
       line: s.dead[0].line,
     });
@@ -495,10 +541,14 @@ export function scanProject(root: string, overrides?: Overrides): Scan {
   const byAbs = new Map(files.map((f) => [f.abs.toLowerCase(), f]));
   const servers = files.filter((f) => f.server);
   const client = files.filter((f) => !f.server);
-  const { routes, unresolved } = findRoutes(servers, byAbs);
+  const js = findRoutes(servers, byAbs);
+  const py = collectPy(root, overrides);
+  const pyRoutes: Route[] = findPyRoutes(py);
+  const routes = [...js.routes, ...pyRoutes];
+  const unresolved = js.unresolved;
   const prefixes = apiPrefix(client);
   const calls = findCalls(client, prefixes.byFile);
-  return { files, byAbs, servers, client, routes, calls, unresolved, apiPrefix: prefixes.global };
+  return { files, byAbs, servers: [...servers, ...py], client, routes, calls, unresolved, apiPrefix: prefixes.global };
 }
 
 // какие переменные окружения читает код и описаны ли они в .env-файлах
@@ -529,7 +579,7 @@ export function analyzeProject(root: string, services: ServiceInfo[] = [], overr
         add({
           kind: 'route',
           severity: unresolved.length ? 'info' : 'warn',
-          message: `Фронт зовёт ${label}, а такого маршрута на сервере не нашёл` + (unresolved.length ? ' (часть роутеров не удалось разобрать)' : ''),
+          message: tr('Фронт зовёт {0}, а такого маршрута на сервере не нашёл', label) + (unresolved.length ? tr(' (часть роутеров не удалось разобрать)') : ''),
           file: c.file,
           line: c.line,
         });
@@ -537,7 +587,7 @@ export function analyzeProject(root: string, services: ServiceInfo[] = [], overr
         add({
           kind: 'method',
           severity: 'error',
-          message: `Фронт зовёт ${c.method} ${label}, а на сервере этот маршрут только для ${[...new Set(hits.map((r) => r.method))].join('/')}`,
+          message: tr('Фронт зовёт {0} {1}, а на сервере этот маршрут только для {2}', c.method, label, [...new Set(hits.map((r) => r.method))].join('/')),
           file: c.file,
           line: c.line,
         });
@@ -550,6 +600,7 @@ export function analyzeProject(root: string, services: ServiceInfo[] = [], overr
   const css = analyzeCss(web, files);
   for (const f of checkCss(css)) add(f);
   for (const f of checkLinks(root, web, servers.length > 0)) add(f);
+  for (const f of checkHtml(web.html)) add(f);
 
   const order = { error: 0, warn: 1, info: 2 };
   findings.sort((a, b) => order[a.severity] - order[b.severity]);

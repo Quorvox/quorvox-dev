@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { scanProject, envUsage } from './checks.ts';
 import type { EnvUse } from './checks.ts';
+import { tr } from './i18n.ts';
 
 // .env.example из кода: только имена переменных и подсказки, без значений.
 // Если файл уже есть, существующее не трогаем, дописываем только недостающее.
@@ -20,20 +21,20 @@ export function renderEnvExample(usage: Map<string, EnvUse>, existingText?: stri
   const block = names
     .map((n) => {
       const u = usage.get(n)!;
-      const note = u.required ? 'нужна, запасного значения в коде нет' : 'необязательная, в коде есть запасное значение';
+      const note = u.required ? tr('нужна, запасного значения в коде нет') : tr('необязательная, в коде есть запасное значение');
       return `# ${u.file}:${u.line} — ${note}\n${n}=`;
     })
     .join('\n\n');
   if (existingText === undefined) {
     return {
-      text: '# Шаблон переменных окружения. Скопируй в .env и впиши свои значения. Сам .env никуда не отправляй.\n\n' + block + (block ? '\n' : ''),
+      text: tr('# Шаблон переменных окружения. Скопируй в .env и впиши свои значения. Сам .env никуда не отправляй.\n\n') + block + (block ? '\n' : ''),
       added: names,
       existing: false,
     };
   }
   if (!names.length) return { text: existingText, added: [], existing: true };
   const sep = existingText.endsWith('\n') ? '\n' : '\n\n';
-  return { text: existingText + sep + '# добавлено Quorvox: переменные, которые читает код, но которых здесь не было\n' + block + '\n', added: names, existing: true };
+  return { text: existingText + sep + tr('# добавлено Quorvox: переменные, которые читает код, но которых здесь не было\n') + block + '\n', added: names, existing: true };
 }
 
 export function buildEnvExample(root: string): EnvExample {

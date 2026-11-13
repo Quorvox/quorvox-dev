@@ -2,6 +2,7 @@ import http from 'node:http';
 import { createReadStream, realpathSync, statSync, readdirSync } from 'node:fs';
 import { join, resolve, extname, sep } from 'node:path';
 import type { AddressInfo } from 'node:net';
+import { tr } from './i18n.ts';
 
 // Встроенный сервер для сайтов без бэкенда (обычные HTML/CSS/JS).
 // Слушает только 127.0.0.1 (для телефона есть отдельный прокси), без кэша, скрытые файлы не отдаёт.
@@ -82,12 +83,12 @@ export function createStaticHandler(root: string): http.RequestListener {
     try {
       urlPath = decodeURIComponent((req.url ?? '/').split(/[?#]/)[0]);
     } catch {
-      page(400, 'Некорректный адрес', '<h1>400</h1><p>Некорректный адрес.</p>', res);
+      page(400, tr('Некорректный адрес'), tr('<h1>400</h1><p>Некорректный адрес.</p>'), res);
       return;
     }
     const segments = urlPath.split('/');
     if (blocked(segments)) {
-      page(404, 'Не найдено', `<h1>404</h1><p>Не найдено: ${esc(urlPath)}</p>`, res);
+      page(404, tr('Не найдено'), tr('<h1>404</h1><p>Не найдено: {0}</p>', esc(urlPath)), res);
       return;
     }
     let file = join(base, ...segments.filter((s) => s !== ''));
@@ -125,7 +126,7 @@ export function createStaticHandler(root: string): http.RequestListener {
       } else {
         // без index.html показываем список страниц: удобно, когда сайт из нескольких файлов
         if (!inside(file)) {
-          page(404, 'Не найдено', '<h1>404</h1>', res);
+          page(404, tr('Не найдено'), '<h1>404</h1>', res);
           return;
         }
         const items = readdirSync(file, { withFileTypes: true })
@@ -133,12 +134,12 @@ export function createStaticHandler(root: string): http.RequestListener {
           .sort((a, b) => Number(b.isDirectory()) - Number(a.isDirectory()) || a.name.localeCompare(b.name))
           .map((e) => `<li><a href="${encodeURI(urlPath + e.name)}${e.isDirectory() ? '/' : ''}">${esc(e.name)}${e.isDirectory() ? '/' : ''}</a></li>`)
           .join('');
-        page(200, 'Список файлов', `<h1>${esc(urlPath)}</h1><p>Здесь нет index.html, поэтому показываю файлы.</p><ul>${items}</ul>`, res);
+        page(200, tr('Список файлов'), tr('<h1>{0}</h1><p>Здесь нет index.html, поэтому показываю файлы.</p><ul>{1}</ul>', esc(urlPath), items), res);
         return;
       }
     }
     if (!st || !st.isFile() || !inside(file)) {
-      page(404, 'Не найдено', `<h1>404</h1><p>Файла нет: ${esc(urlPath)}</p>`, res);
+      page(404, tr('Не найдено'), tr('<h1>404</h1><p>Файла нет: {0}</p>', esc(urlPath)), res);
       return;
     }
     const ext = extname(file).toLowerCase();

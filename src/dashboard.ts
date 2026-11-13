@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { randomBytes } from 'node:crypto';
 import { dashboardHtml } from './dashboard-html.ts';
+import { localizeHtml } from './webi18n.ts';
 import type { ServiceView, ChecksView } from './model.ts';
 import type { LogLine } from './logbuf.ts';
 
@@ -44,7 +45,7 @@ export class Dashboard {
       retainContextWhenHidden: true,
     });
     this.panel = panel;
-    panel.webview.html = dashboardHtml(randomBytes(16).toString('hex'));
+    panel.webview.html = localizeHtml(dashboardHtml(randomBytes(16).toString('hex')));
     panel.webview.onDidReceiveMessage((msg: { cmd: string; name?: string; file?: string; line?: number }) => {
       if (msg.cmd === 'ready') {
         this.ready = true;
@@ -80,6 +81,12 @@ export class Dashboard {
   qr(info: { name: string; url: string; svg: string } | null) {
     if (!this.ready) return;
     this.post(info ? { type: 'qr', open: true, ...info } : { type: 'qr', open: false });
+  }
+
+  relocalize() {
+    if (!this.panel) return;
+    this.ready = false;
+    this.panel.webview.html = localizeHtml(dashboardHtml(randomBytes(16).toString('hex')));
   }
 
   update() {

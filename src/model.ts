@@ -2,6 +2,7 @@ import { relative } from 'node:path';
 import type { Stack } from './stack.ts';
 import type { Status } from './runner.ts';
 import type { Finding, Report } from './checks.ts';
+import { tr } from './i18n.ts';
 
 // то, что показываем в боковой панели и на дашборде
 export interface ServiceView {
@@ -40,7 +41,7 @@ export function snapshot(stack: Stack | null, root?: string): ServiceView[] {
   return stack.runners.map((r) => ({
     name: r.def.name,
     status: r.status,
-    command: r.def.kind === 'static' ? 'встроенный сервер для сайта (без бэкенда)' : r.def.command,
+    command: r.def.kind === 'static' ? tr('встроенный сервер для сайта (без бэкенда)') : r.def.command,
     dir: root ? relative(root, r.def.cwd) || '.' : r.def.cwd,
     url: r.proxy?.port ? `http://localhost:${r.proxy.port}` : null,
     lan: r.proxy?.lanUrl() ?? null,

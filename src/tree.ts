@@ -1,8 +1,9 @@
 import * as vscode from 'vscode';
 import type { ServiceView } from './model.ts';
 import type { Finding, Report } from './checks.ts';
+import { tr } from './i18n.ts';
 
-const STATUS_TEXT = { running: 'запущен', crashed: 'упал', stopped: 'остановлен' } as const;
+const STATUS_TEXT = () => ({ running: tr('запущен'), crashed: tr('упал'), stopped: tr('остановлен') }) as const;
 
 // результаты проверок в боковой панели
 export class ChecksTree implements vscode.TreeDataProvider<Finding | null> {
@@ -22,9 +23,9 @@ export class ChecksTree implements vscode.TreeDataProvider<Finding | null> {
 
   getTreeItem(f: Finding | null): vscode.TreeItem {
     if (!f) {
-      const ok = new vscode.TreeItem('Проблем не найдено');
+      const ok = new vscode.TreeItem(tr('Проблем не найдено'));
       ok.iconPath = new vscode.ThemeIcon('pass', new vscode.ThemeColor('testing.iconPassed'));
-      ok.description = this.report ? `маршрутов ${this.report.stats.routes}, запросов ${this.report.stats.calls}` : '';
+      ok.description = this.report ? tr('маршрутов {0}, запросов {1}', this.report.stats.routes, this.report.stats.calls) : '';
       return ok;
     }
     const item = new vscode.TreeItem(f.message, vscode.TreeItemCollapsibleState.None);
@@ -36,7 +37,7 @@ export class ChecksTree implements vscode.TreeDataProvider<Finding | null> {
         : f.severity === 'warn'
           ? new vscode.ThemeIcon('warning', new vscode.ThemeColor('list.warningForeground'))
           : new vscode.ThemeIcon('info');
-    if (f.file) item.command = { command: 'quorvox.openFinding', title: 'Открыть', arguments: [f.file, f.line ?? 1] };
+    if (f.file) item.command = { command: 'quorvox.openFinding', title: tr('Открыть'), arguments: [f.file, f.line ?? 1] };
     return item;
   }
 }
@@ -58,7 +59,7 @@ export class ServicesTree implements vscode.TreeDataProvider<ServiceView> {
 
   getTreeItem(s: ServiceView): vscode.TreeItem {
     const item = new vscode.TreeItem(s.name, vscode.TreeItemCollapsibleState.None);
-    item.description = STATUS_TEXT[s.status] + (s.url ? ` · ${s.url.replace('http://', '')}` : '');
+    item.description = STATUS_TEXT()[s.status] + (s.url ? ` · ${s.url.replace('http://', '')}` : '');
     item.contextValue = `svc ${s.status}${s.url ? ' live' : ''}`;
     item.iconPath =
       s.status === 'running'
@@ -67,12 +68,12 @@ export class ServicesTree implements vscode.TreeDataProvider<ServiceView> {
           ? new vscode.ThemeIcon('error', new vscode.ThemeColor('testing.iconFailed'))
           : new vscode.ThemeIcon('circle-outline');
     item.tooltip = new vscode.MarkdownString(
-      `**${s.name}** — ${STATUS_TEXT[s.status]}\n\n\`${s.command}\`\n\nпапка: \`${s.dir}\`` +
-        (s.autoRestart ? '\n\nавтоперезапуск при изменении файлов' : '\n\nсервис следит за файлами сам') +
-        (s.url ? `\n\nс автообновлением: ${s.url}` : ''),
+      tr('**{0}** — {1}\n\n`{2}`\n\nпапка: `{3}`', s.name, STATUS_TEXT()[s.status], s.command, s.dir) +
+        (s.autoRestart ? tr('\n\nавтоперезапуск при изменении файлов') : tr('\n\nсервис следит за файлами сам')) +
+        (s.url ? tr('\n\nс автообновлением: {0}', s.url) : ''),
     );
     // клик по сервису — открыть дашборд с логами только этого сервиса
-    item.command = { command: 'quorvox.dashboard', title: 'Логи', arguments: [s.name] };
+    item.command = { command: 'quorvox.dashboard', title: tr('Логи'), arguments: [s.name] };
     return item;
   }
 }
